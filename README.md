@@ -1,0 +1,138 @@
+# CAMA
+
+## Introduction
+
+Test project to explore a web client to consume Alps services
+
+## Test
+
+### Cmd client
+
+Use websocat client for testing. Curl only accepts websocket as EXPERIMENTAL hence it needs to be enabled during build process, you can check whether curl supports websockets if protocol `ws` is listed in `curl --version`.
+
+As an alternative, use https://github.com/vi/websocat
+
+#### Installation
+
+```
+wget https://github.com/vi/websocat/releases/download/v1.11.0/websocat.x86_64-unknown-linux-musl
+chmod +x websocat.x86_64-unknown-linux-musl
+mv websocat.x86_64-unknown-linux-musl ~/.local/bin/websocat
+```
+
+#### Run server (local machine for testing)
+
+``````
+SOCKS5="socks5h://127.0.0.1:1080" cargo run
+```
+
+#### Test: Cli client 
+
+```
+websocat ws://localhost:3000/console/x1000c4s0b0n0
+websocat ws://localhost:3000/cfssession/batcher-4176d230-a813-48cd-9328-b1ba7da68d99/logs
+```
+
+### Test: Web client
+
+ - Open a browser
+ - Go to http://localhost:5173/console/x1000c4s0b0n0 to start xterm.js
+ - Go to http://localhost:5173/cfssession/batcher-4176d230-a813-48cd-9328-b1ba7da68d99/logs
+
+#### Setup web client development environment
+
+Vuejs development environment (ref https://vuejs.org/guide/quick-start.html#creating-a-vue-application)
+
+```
+❯ npm init vue@latest
+Need to install the following packages:
+  create-vue@3.6.1
+Ok to proceed? (y)
+
+Vue.js - The Progressive JavaScript Framework
+
+✔ Project name: … cama
+✔ Add TypeScript? … No / Yes
+✔ Add JSX Support? … No / Yes
+✔ Add Vue Router for Single Page Application development? … No / Yes
+✔ Add Pinia for state management? … No / Yes
+✔ Add Vitest for Unit Testing? … No / Yes
+✔ Add an End-to-End Testing Solution? › No
+✔ Add ESLint for code quality? … No / Yes
+✔ Add Prettier for code formatting? … No / Yes
+
+Scaffolding project in /home/msopena/polybox/Documents/tests/rust/cama/assets/cama...
+
+Done. Now run:
+
+  cd cama
+  npm install
+  npm run format
+  npm run dev
+
+
+cama/assets on  master [!?] via  v18.16.0 took 59s
+❯ cd cama
+
+cama/assets/cama on  master [!?] via  v18.16.0
+❯ npm install
+npm WARN deprecated sourcemap-codec@1.4.8: Please use @jridgewell/sourcemap-codec instead
+
+added 146 packages, and audited 147 packages in 18s
+
+32 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+cama/assets/cama on  master [!?] via  v18.16.0 took 18s
+❯ ls
+index.html  node_modules  package.json  package-lock.json  public  README.md  src  vite.config.js
+
+cama/assets/cama on  master [!?] via  v18.16.0
+❯ ls src/
+App.vue  assets  components  main.js  router  stores  views
+
+cama/assets/cama on  master [!?] via  v18.16.0
+❯ npm run format
+
+> cama@0.0.0 format
+> prettier --write src/
+
+src/App.vue 105ms
+src/assets/base.css 17ms
+src/assets/main.css 6ms
+src/components/HelloWorld.vue 24ms
+src/components/icons/IconCommunity.vue 4ms
+src/components/icons/IconDocumentation.vue 4ms
+src/components/icons/IconEcosystem.vue 2ms
+src/components/icons/IconSupport.vue 2ms
+src/components/icons/IconTooling.vue 5ms
+src/components/TheWelcome.vue 21ms
+src/components/WelcomeItem.vue 15ms
+src/main.js 8ms
+src/router/index.js 13ms
+src/stores/counter.js 8ms
+src/views/AboutView.vue 5ms
+src/views/HomeView.vue 4ms
+
+cama/assets/cama on  master [!?] via  v18.16.0
+❯ npm run dev
+
+> cama@0.0.0 dev
+> vite
+
+
+  VITE v4.3.3  ready in 338 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+  ➜  press h to show help
+```
+
+Additionally add xterm and  xterm-addon-fit (ref https://xtermjs.org/docs/guides/download/ and https://www.npmjs.com/package/xterm-addon-fit)
+
+```
+npm install --save xterm
+npm install --save xterm-addon-fit
+```
