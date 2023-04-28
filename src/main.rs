@@ -55,7 +55,7 @@ async fn main() {
         .route("/", get(root))
         // `POST /users` goes to `create_user`
         .route("/users", post(create_user))
-        .route("/console/:xname", get(ws_handler))
+        .route("/console/:xname", get(ws_console))
         .route("/cfssession/:cfssession/logs", get(ws_cfs_session_logs))
         .layer(
             TraceLayer::new_for_http()
@@ -208,7 +208,7 @@ async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_sessio
 /// websocket protocol will occur.
 /// This is the last point where we can extract TCP/IP metadata such as IP address of the client
 /// as well as things from HTTP headers such as user-agent of the browser etc.
-async fn ws_handler(
+async fn ws_console(
     Path(xname): Path<String>,
     ws: WebSocketUpgrade,
     user_agent: Option<TypedHeader<headers::UserAgent>>,
@@ -383,36 +383,6 @@ async fn handle_socket(mut socket: WebSocket, who: SocketAddr, xname: String) {
     let client = get_k8s_client_programmatically(k8s_api_url, shasta_k8s_secrets)
         .await
         .unwrap();
-
-    /* // GET CFS SESSION
-
-    let cfs_session_table_data_list =
-        manta::cfs::session::get_sessions(shasta_token, shasta_base_url, None, None, Some(&1))
-            .await;
-
-    cfs_session_name = &cfs_session_table_data_list.first().unwrap()[0];
-
-    // GET CFS SESSION LOGS
-
-    socket
-        .send(Message::Text(format!(
-            "Fetching CFS session logs for {} ...",
-            cfs_session_name
-        )))
-        .await;
-
-    let mut logs_stream = get_cfs_session_logs_stream(client, cfs_session_name, layer_id)
-        .await
-        .unwrap();
-
-    while let Some(line) = logs_stream.try_next().await.unwrap() {
-        socket
-            .send(Message::Text(format!(
-                "{}",
-                std::str::from_utf8(&line).unwrap()
-            )))
-            .await;
-    } */
 
     // By splitting socket we can send and receive at the same time. In this example we will send
     // unsolicited messages to client based on some sort of server's internal event (i.e .timer).

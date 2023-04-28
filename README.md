@@ -135,4 +135,5 @@ Additionally add xterm and  xterm-addon-fit (ref https://xtermjs.org/docs/guides
 ```
 npm install --save xterm
 npm install --save xterm-addon-fit
+npm install --save xterm-addon-attach
 ```
