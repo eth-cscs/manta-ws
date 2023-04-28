@@ -12,7 +12,6 @@ const route = useRoute()
 
 const term = new Terminal({cursorBlink: true, convertEol: true});
 const fitAddon = new FitAddon();
-term.loadAddon(fitAddon);
 
 var socket;
 var command;
@@ -24,6 +23,7 @@ onMounted(() => {
   const attachAddon = new AttachAddon(socket);
 
   term.loadAddon(attachAddon);
+  term.loadAddon(fitAddon);
 
   term.open(document.getElementById('terminal'));
 })
