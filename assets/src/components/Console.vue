@@ -10,7 +10,7 @@ import { useRouter, useRoute } from 'vue-router'
 const router = useRouter()
 const route = useRoute()
 
-const term = new Terminal({cursorBlink: true, convertEol: true});
+const term = new Terminal({cursorBlink: true, convertEol: true, scrollback: 6000});
 const fitAddon = new FitAddon();
 
 var socket;
@@ -26,6 +26,8 @@ onMounted(() => {
   term.loadAddon(fitAddon);
 
   term.open(document.getElementById('terminal'));
+
+  fitAddon.fit();
 })
 </script>
 
