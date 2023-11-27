@@ -20,18 +20,28 @@ const router = createRouter({
     {
       path: '/console/:xname',
       name: 'console',
-      // route level code-splitting
-      // this generates a separate chunk (About.[hash].js) for this route
-      // which is lazy-loaded when the route is visited.
       component: () => import('../views/ConsoleView.vue')
+    },
+    {
+      path: '/cfssessions',
+      name: 'listcfssessions',
+      component: () => import('../views/ListCfsSessionsView.vue')
     },
     {
       path: '/cfssession/:cfssession/logs',
       name: 'cfssessionlogs',
-      // route level code-splitting
-      // this generates a separate chunk (About.[hash].js) for this route
-      // which is lazy-loaded when the route is visited.
       component: () => import('../views/CfsSessionLogsView.vue')
+    },
+    {
+      path: '/cfssession/:cfssession/logs',
+      name: 'cfssessionlogs',
+      component: () => import('../views/CfsSessionLogsView.vue')
+    },
+    {
+      path: '/hsm/:hsm',
+      name: 'hsmgroupdetails',
+
+      component: () => import('../views/HsmGroupDetailsView.vue')
     }
   ]
 })

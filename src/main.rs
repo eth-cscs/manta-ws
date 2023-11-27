@@ -2,8 +2,9 @@ mod jwt_utils;
 
 use axum::{
     extract::{
+        self,
         ws::{CloseFrame, Message, WebSocket},
-        ConnectInfo, WebSocketUpgrade, Path,
+        ConnectInfo, Path, WebSocketUpgrade,
     },
     headers,
     http::StatusCode,
@@ -20,9 +21,11 @@ use cojin::{
 };
 use hyper::HeaderMap;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, net::SocketAddr, ops::ControlFlow, path::PathBuf};
+use serde_json::{json, Value};
+use std::{borrow::Cow, error::Error, net::SocketAddr, ops::ControlFlow, path::PathBuf};
 use tokio::{io::AsyncWriteExt, runtime::Runtime};
 use tower_http::{
+    cors::CorsLayer,
     services::ServeDir,
     trace::{DefaultMakeSpan, TraceLayer},
 };
@@ -56,7 +59,11 @@ async fn main() {
         // `POST /users` goes to `create_user`
         .route("/users", post(create_user))
         .route("/console/:xname", get(ws_console))
+        .route("/cfssession", get(get_cfs_session))
         .route("/cfssession/:cfssession/logs", get(ws_cfs_session_logs))
+        .route("/hsm", get(get_hsm))
+        .route("/hsm/:hsm", get(get_hsm_details))
+        .layer(CorsLayer::very_permissive())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
@@ -135,21 +142,18 @@ async fn ws_cfs_session_logs(
 }
 
 async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_session_name: String) {
-
     let shasta_base_url = "https://api.cmn.alps.cscs.ch/apis";
-    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiJhNDJiYTljYS1mODE3LTQ4YjgtOTFjYy0xMjBiMTAxMzQxNmMiLCJleHAiOjE2ODI0OTc4NzIsIm5iZiI6MCwiaWF0IjoxNjgyNDExNDcyLCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjQ5NDhlYjBlLTc1MTUtNGRiNS05NTM4LWFiYTI3NDY0YzI3OSIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.Z-TvRIDwpJVRqkRTjKLzY4qOqFvrQQVxOHpL2dPM584eiD_nQHLVXxWbI37w2xd8Kmtw0jKsLu2xrgXRRtHn6cChDnlls6RhPX1xrt-LSc7A2VVRpIrOcY4AEG3G2ZluCdTIaxk3bKlxqNCDKBO1YRSc901Pmys1g26pLYjCN_RWF_RsVnmW_XR4v0xoBu5eJEXrM8ZQXCQFuxCJ7qLqMv5b8Bt3ga-uCIteRUZ83KZsuZGJEn0wSNorFxhBOORyaG82XfSyNJuGF-d-aACZIEh3yDmTQPPEdTYbQaLvNwZkHKbShC_DPVXPn8l-GN1cAUHByHFdIAyxI3vE2RblnA";
+    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiIzYzdlODEyMC01ZGU3LTQ1NWQtOWVlMi1mZDdhNjQ4MmZiZDQiLCJleHAiOjE2ODM4NzY4OTYsIm5iZiI6MCwiaWF0IjoxNjgzNzkwNDk2LCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjI4NWQ2ZWY0LTdlMmMtNDYwNi1iNGQ2LWJiODQ4M2U1NmE4ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.d53CpcW2tVINY6j6NAzkKxD97TdQf1Bs7Ml6UxMqrhR87zd7xk3avi-up8gqjcvBS9YEZ9_2Ldsth7YFofHEjf96HbcqB387ym0LdK18Yl0IOVAj5cW8sDF57iSktNXV0zX8ji8dqKyqD9dVZ3faH0zWZA2LAVbsPrdsliokOzBDxZhK5bj7ide2AQS6ycncSZ1ZUbqXHP_ocMATSWsjOn3evVwQ4F0Ax95l7tC9rsWyx0rNh3g8SROAGXBAJA2aMhMqkDsUf_iv7nNl3CwtTd3yqkrtQLxH4Mw1OroRwbHC1U--Id5Zf2MqGfuzEeosoLPvClJlyJNTcClJ3yFemA";
 
-    // let gitea_base_url = "https://api.cmn.alps.cscs.ch/vcs";
+    let gitea_base_url = "https://api.cmn.alps.cscs.ch/vcs";
     let gitea_token: &str;
     let vault_base_url = "https://hashicorp-vault.cscs.ch:8200";
     let vault_role_id = "b15517de-cabb-06ba-af98-633d216c6d99";
-    // let cfs_session_name: &str;
     let k8s_api_url = "https://10.252.1.12:6442";
 
     let configuration_name: Option<String> = None;
     let most_recent: Option<bool> = None;
     let layer_id: Option<&u8> = None;
-    // let xname: &str = "x1000c4s0b0n0";
 
     // GET CFS CONFIGURATION
 
@@ -175,8 +179,8 @@ async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_sessio
     // GET CFS SESSION
 
     /* let cfs_session_table_data_list =
-        manta::cfs::session::get_sessions(shasta_token, shasta_base_url, None, Some(&cfs_session_name), Some(&1))
-            .await; */
+    manta::cfs::session::get_sessions(shasta_token, shasta_base_url, None, Some(&cfs_session_name), Some(&1))
+        .await; */
 
     // cfs_session_name = cfs_session_table_data_list.first().unwrap()[0];
 
@@ -226,130 +230,9 @@ async fn ws_console(
 }
 
 /// Actual websocket statemachine (one will be spawned per connection)
-async fn handle_socket(mut socket: WebSocket, who: SocketAddr, xname: String) {
-    /* //send a ping (unsupported by some browsers) just to kick things off and get a response
-    if socket.send(Message::Ping(vec![1, 2, 3])).await.is_ok() {
-        println!("Pinged {}...", who);
-    } else {
-        println!("Could not send ping {}!", who);
-        // no Error here since the only thing we can do is to close the connection.
-        // If we can not send messages, there is no way to salvage the statemachine anyway.
-        return;
-    }
-
-    // receive single message from a client (we can either receive or send with socket).
-    // this will likely be the Pong for our Ping or a hello message from client.
-    // waiting for message from a client will block this task, but will not block other client's
-    // connections.
-    if let Some(msg) = socket.recv().await {
-        if let Ok(msg) = msg {
-            if process_message(msg, who).is_break() {
-                return;
-            }
-        } else {
-            println!("client {who} abruptly disconnected");
-            return;
-        }
-    }
-
-    // Since each client gets individual statemachine, we can pause handling
-    // when necessary to wait for some external event (in this case illustrated by sleeping).
-    // Waiting for this client to finish getting its greetings does not prevent other clients from
-    // connecting to server and receiving their greetings.
-    for i in 1..5 {
-        if socket
-            .send(Message::Text(format!("Hi {i} times!")))
-            .await
-            .is_err()
-        {
-            println!("client {who} abruptly disconnected");
-            return;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    } */
-
-    /*
-    // By splitting socket we can send and receive at the same time. In this example we will send
-    // unsolicited messages to client based on some sort of server's internal event (i.e .timer).
-    let (mut sender, mut receiver) = socket.split();
-
-    // Spawn a task that will push several messages to the client (does not matter what client does)
-    let mut send_task = tokio::spawn(async move {
-        let n_msg = 20;
-        for i in 0..n_msg {
-            // In case of any websocket error, we exit.
-            if sender
-                .send(Message::Text(format!("Server message {i} ...")))
-                .await
-                .is_err()
-            {
-                return i;
-            }
-
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        }
-
-        println!("Sending close to {who}...");
-        if let Err(e) = sender
-            .send(Message::Close(Some(CloseFrame {
-                code: axum::extract::ws::close_code::NORMAL,
-                reason: Cow::from("Goodbye"),
-            })))
-            .await
-        {
-            println!("Could not send Close due to {}, probably it is ok?", e);
-        }
-        n_msg
-    });
-
-    // If any one of the tasks exit, abort the other.
-    tokio::select! {
-        rv_a = (&mut send_task) => {
-            match rv_a {
-                Ok(a) => println!("{} messages sent to {}", a, who),
-                Err(a) => println!("Error sending messages {:?}", a)
-            }
-            recv_task.abort();
-        },
-        rv_b = (&mut recv_task) => {
-            match rv_b {
-                Ok(b) => println!("Received {} messages", b),
-                Err(b) => println!("Error receiving messages {:?}", b)
-            }
-            send_task.abort();
-        }
-    }
-
-    // This second task will receive messages from client and print them on server console
-    let mut recv_task = tokio::spawn(async move {
-        let mut cnt = 0;
-        while let Some(Ok(msg)) = receiver.next().await {
-            cnt += 1;
-            // print message and break if instructed to do so
-            if process_message(msg, who).is_break() {
-                break;
-            }
-        }
-        cnt
-    });
-
-    // returning from the handler closes the websocket connection
-    println!("Websocket context {} destroyed", who);
-    */
-
-    /* let welcome_msg = socket
-        .send(Message::Text(
-            "Hello from Cama backend!\r\nI am going to fetch data from Shasta using 'cojin'.\r\n"
-                .to_string(),
-        ))
-        .await;
-
-    if welcome_msg.is_err() {
-        eprintln!("ERROR: {:#?}", welcome_msg);
-    } */
-
+async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
     let shasta_base_url = "https://api.cmn.alps.cscs.ch/apis";
-    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiJhNDJiYTljYS1mODE3LTQ4YjgtOTFjYy0xMjBiMTAxMzQxNmMiLCJleHAiOjE2ODI0OTc4NzIsIm5iZiI6MCwiaWF0IjoxNjgyNDExNDcyLCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjQ5NDhlYjBlLTc1MTUtNGRiNS05NTM4LWFiYTI3NDY0YzI3OSIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.Z-TvRIDwpJVRqkRTjKLzY4qOqFvrQQVxOHpL2dPM584eiD_nQHLVXxWbI37w2xd8Kmtw0jKsLu2xrgXRRtHn6cChDnlls6RhPX1xrt-LSc7A2VVRpIrOcY4AEG3G2ZluCdTIaxk3bKlxqNCDKBO1YRSc901Pmys1g26pLYjCN_RWF_RsVnmW_XR4v0xoBu5eJEXrM8ZQXCQFuxCJ7qLqMv5b8Bt3ga-uCIteRUZ83KZsuZGJEn0wSNorFxhBOORyaG82XfSyNJuGF-d-aACZIEh3yDmTQPPEdTYbQaLvNwZkHKbShC_DPVXPn8l-GN1cAUHByHFdIAyxI3vE2RblnA";
+    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiIzYzdlODEyMC01ZGU3LTQ1NWQtOWVlMi1mZDdhNjQ4MmZiZDQiLCJleHAiOjE2ODM4NzY4OTYsIm5iZiI6MCwiaWF0IjoxNjgzNzkwNDk2LCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjI4NWQ2ZWY0LTdlMmMtNDYwNi1iNGQ2LWJiODQ4M2U1NmE4ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.d53CpcW2tVINY6j6NAzkKxD97TdQf1Bs7Ml6UxMqrhR87zd7xk3avi-up8gqjcvBS9YEZ9_2Ldsth7YFofHEjf96HbcqB387ym0LdK18Yl0IOVAj5cW8sDF57iSktNXV0zX8ji8dqKyqD9dVZ3faH0zWZA2LAVbsPrdsliokOzBDxZhK5bj7ide2AQS6ycncSZ1ZUbqXHP_ocMATSWsjOn3evVwQ4F0Ax95l7tC9rsWyx0rNh3g8SROAGXBAJA2aMhMqkDsUf_iv7nNl3CwtTd3yqkrtQLxH4Mw1OroRwbHC1U--Id5Zf2MqGfuzEeosoLPvClJlyJNTcClJ3yFemA";
 
     // let gitea_base_url = "https://api.cmn.alps.cscs.ch/vcs";
     let gitea_token: &str;
@@ -361,7 +244,6 @@ async fn handle_socket(mut socket: WebSocket, who: SocketAddr, xname: String) {
     let configuration_name: Option<String> = None;
     let most_recent: Option<bool> = None;
     let layer_id: Option<&u8> = None;
-    // let xname: &str = "x1000c4s0b0n0";
 
     // GET CFS CONFIGURATION
 
@@ -476,4 +358,39 @@ fn process_message(msg: Message, who: SocketAddr) -> ControlFlow<(), ()> {
         }
     }
     ControlFlow::Continue(())
+}
+
+async fn get_hsm() -> Json<serde_json::Value> {
+    let shasta_base_url = "https://api.cmn.alps.cscs.ch/apis";
+    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiIzYzdlODEyMC01ZGU3LTQ1NWQtOWVlMi1mZDdhNjQ4MmZiZDQiLCJleHAiOjE2ODM4NzY4OTYsIm5iZiI6MCwiaWF0IjoxNjgzNzkwNDk2LCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjI4NWQ2ZWY0LTdlMmMtNDYwNi1iNGQ2LWJiODQ4M2U1NmE4ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.d53CpcW2tVINY6j6NAzkKxD97TdQf1Bs7Ml6UxMqrhR87zd7xk3avi-up8gqjcvBS9YEZ9_2Ldsth7YFofHEjf96HbcqB387ym0LdK18Yl0IOVAj5cW8sDF57iSktNXV0zX8ji8dqKyqD9dVZ3faH0zWZA2LAVbsPrdsliokOzBDxZhK5bj7ide2AQS6ycncSZ1ZUbqXHP_ocMATSWsjOn3evVwQ4F0Ax95l7tC9rsWyx0rNh3g8SROAGXBAJA2aMhMqkDsUf_iv7nNl3CwtTd3yqkrtQLxH4Mw1OroRwbHC1U--Id5Zf2MqGfuzEeosoLPvClJlyJNTcClJ3yFemA";
+    let response =
+        cojin::shasta::hsm::http_client::get_hsm_groups(shasta_token, shasta_base_url, None).await;
+    let response_data = axum::Json(serde_json::to_value(response.as_ref().unwrap()).unwrap());
+    if response.is_ok() {
+        return response_data; // FIX THIS: make cojin::shasta::hsm::http_client::get_hsm_groups to return Value instead of Vec<Value>
+    } else {
+        eprintln!("ERROR:\n{:#?}", response.unwrap());
+        return response_data;
+    }
+}
+
+async fn get_hsm_details(Path(hsm): Path<String>) -> Json<serde_json::Value> {
+    let shasta_base_url = "https://api.cmn.alps.cscs.ch/apis";
+    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiIzYzdlODEyMC01ZGU3LTQ1NWQtOWVlMi1mZDdhNjQ4MmZiZDQiLCJleHAiOjE2ODM4NzY4OTYsIm5iZiI6MCwiaWF0IjoxNjgzNzkwNDk2LCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjI4NWQ2ZWY0LTdlMmMtNDYwNi1iNGQ2LWJiODQ4M2U1NmE4ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.d53CpcW2tVINY6j6NAzkKxD97TdQf1Bs7Ml6UxMqrhR87zd7xk3avi-up8gqjcvBS9YEZ9_2Ldsth7YFofHEjf96HbcqB387ym0LdK18Yl0IOVAj5cW8sDF57iSktNXV0zX8ji8dqKyqD9dVZ3faH0zWZA2LAVbsPrdsliokOzBDxZhK5bj7ide2AQS6ycncSZ1ZUbqXHP_ocMATSWsjOn3evVwQ4F0Ax95l7tC9rsWyx0rNh3g8SROAGXBAJA2aMhMqkDsUf_iv7nNl3CwtTd3yqkrtQLxH4Mw1OroRwbHC1U--Id5Zf2MqGfuzEeosoLPvClJlyJNTcClJ3yFemA";
+    let hsm_group =
+        cojin::shasta::hsm::http_client::get_hsm_group(shasta_token, shasta_base_url, &hsm)
+            .await
+            .unwrap();
+    let hsm_groups_node_list =
+        cojin::shasta::hsm::utils::get_members_from_hsm_group_serde_value(&hsm_group);
+
+    let response =
+        cojin::manta::get_nodes_status::exec(shasta_token, shasta_base_url, hsm_groups_node_list)
+            .await;
+    axum::Json(serde_json::to_value(response).unwrap())
+}
+
+
+async fn get_cfs_session() -> Json<serde_json::Value> {
+    Json(json!({}))
 }
