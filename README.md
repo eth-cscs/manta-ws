@@ -22,8 +22,15 @@ mv websocat.x86_64-unknown-linux-musl ~/.local/bin/websocat
 
 #### Run server (local machine for testing)
 
-``````
+```
 SOCKS5="socks5h://127.0.0.1:1080" cargo run
+```
+
+#### Run web server (local machine through npm for testing)
+
+```
+cd assets
+npm run dev
 ```
 
 #### Test: Cli client 

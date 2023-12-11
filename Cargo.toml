@@ -7,7 +7,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cojin = { path = "../cojin" }
+# cojin = { path = "../cojin" }
+mesa = "0.17.2"
 axum = { version = "0.6.15", features = ["headers", "ws"] }
 jsonwebtoken = "8.1.1"
 serde = { version = "1.0.145", features = ["derive"] }
