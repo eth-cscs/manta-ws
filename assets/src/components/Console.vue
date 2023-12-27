@@ -1,23 +1,29 @@
 <script setup>
 
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import 'xterm/css/xterm.css';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { AttachAddon } from 'xterm-addon-attach';
 import { useRouter, useRoute } from 'vue-router'
-    
+
 const router = useRouter()
 const route = useRoute()
 
-const term = new Terminal({cursorBlink: true, convertEol: true, scrollback: 6000});
+const term = new Terminal({ cursorBlink: true, convertEol: true, scrollback: 6000 });
 const fitAddon = new FitAddon();
 
 var socket;
 var command;
+var authToken = ref("")
 
 // lifecycle hooks
 onMounted(() => {
+  authToken.value = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("authtoken="))
+    ?.split("=")[1];
+
   socket = new WebSocket("ws://localhost:3000/console/" + route.params.xname);
 
   const attachAddon = new AttachAddon(socket);
@@ -38,5 +44,4 @@ onMounted(() => {
   </div>
 </template>
 
-<style>
-</style>
+<style></style>

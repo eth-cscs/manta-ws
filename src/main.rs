@@ -2,7 +2,6 @@ mod jwt_utils;
 
 use axum::{
     extract::{
-        self,
         ws::{CloseFrame, Message, WebSocket},
         ConnectInfo, Path, WebSocketUpgrade,
     },
@@ -12,17 +11,16 @@ use axum::{
     routing::{get, post},
     Json, Router, TypedHeader,
 };
+use base64::decode;
 use bytes::Bytes;
+use config::Config;
+use directories::ProjectDirs;
 use hyper::HeaderMap;
-use mesa::{
-    common::vault::http_client::fetch_shasta_k8s_secrets,
-    shasta::kubernetes::{
-        get_cfs_session_container_ansible_logs_stream, get_k8s_client_programmatically,
-    },
-};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{borrow::Cow, error::Error, net::SocketAddr, ops::ControlFlow, path::PathBuf};
+use std::{
+    borrow::Cow, error::Error, fs::File, io::Read, net::SocketAddr, ops::ControlFlow, path::PathBuf,
+};
 use tokio::{io::AsyncWriteExt, runtime::Runtime};
 use tower_http::{
     cors::CorsLayer,
@@ -58,6 +56,7 @@ async fn main() {
         .route("/", get(root))
         // `POST /users` goes to `create_user`
         .route("/users", post(create_user))
+        .route("/authenticate", get(authenticate))
         .route("/console/:xname", get(ws_console))
         .route("/cfssession", get(get_cfs_session))
         .route("/cfssession/:cfssession/logs", get(ws_cfs_session_logs))
@@ -93,6 +92,7 @@ struct User {
 }
 
 async fn root() -> &'static str {
+    println!("Hello, World!");
     "Hello, World!"
 }
 
@@ -142,45 +142,37 @@ async fn ws_cfs_session_logs(
 }
 
 async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_session_name: String) {
-    let shasta_base_url = "https://api.cmn.alps.cscs.ch/apis";
-    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiIzYzdlODEyMC01ZGU3LTQ1NWQtOWVlMi1mZDdhNjQ4MmZiZDQiLCJleHAiOjE2ODM4NzY4OTYsIm5iZiI6MCwiaWF0IjoxNjgzNzkwNDk2LCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjI4NWQ2ZWY0LTdlMmMtNDYwNi1iNGQ2LWJiODQ4M2U1NmE4ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.d53CpcW2tVINY6j6NAzkKxD97TdQf1Bs7Ml6UxMqrhR87zd7xk3avi-up8gqjcvBS9YEZ9_2Ldsth7YFofHEjf96HbcqB387ym0LdK18Yl0IOVAj5cW8sDF57iSktNXV0zX8ji8dqKyqD9dVZ3faH0zWZA2LAVbsPrdsliokOzBDxZhK5bj7ide2AQS6ycncSZ1ZUbqXHP_ocMATSWsjOn3evVwQ4F0Ax95l7tC9rsWyx0rNh3g8SROAGXBAJA2aMhMqkDsUf_iv7nNl3CwtTd3yqkrtQLxH4Mw1OroRwbHC1U--Id5Zf2MqGfuzEeosoLPvClJlyJNTcClJ3yFemA";
+    let settings = get_configuration();
 
-    let gitea_base_url = "https://api.cmn.alps.cscs.ch/vcs";
-    let gitea_token: &str;
-    let vault_base_url = "https://hashicorp-vault.cscs.ch:8200";
-    let vault_role_id = "b15517de-cabb-06ba-af98-633d216c6d99";
-    let vault_secret_path = "alps";
-    let k8s_api_url = "https://10.252.1.12:6442";
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
 
-    let configuration_name: Option<String> = None;
-    let most_recent: Option<bool> = None;
-    let layer_id: Option<&u8> = None;
-
-    // GET CFS CONFIGURATION
-
-    /* get_configuration::exec(
-    gitea_token,
-    shasta_token,
-    shasta_base_url,
-    configuration_name.as_ref(),
-    hsm_group_name.as_ref(),
-    most_recent,
-    limit.as_ref(),
-    )
-    .await; */
+    let vault_base_url = site_detail_value.get("vault_base_url").unwrap().to_string();
+    let vault_role_id = site_detail_value.get("vault_role_id").unwrap().to_string();
+    let vault_secret_path = site_detail_value
+        .get("vault_secret_path")
+        .unwrap()
+        .to_string();
+    let k8s_api_url = site_detail_value.get("k8s_api_url").unwrap().to_string();
 
     // GET K8S CLIENT
 
     let shasta_k8s_secrets = mesa::common::vault::http_client::fetch_shasta_k8s_secrets(
-        vault_base_url,
-        vault_secret_path,
-        vault_role_id,
+        &vault_base_url,
+        &vault_secret_path,
+        &vault_role_id,
     )
     .await;
 
-    let client = get_k8s_client_programmatically(k8s_api_url, shasta_k8s_secrets)
-        .await
-        .unwrap();
+    let client =
+        mesa::common::kubernetes::get_k8s_client_programmatically(&k8s_api_url, shasta_k8s_secrets)
+            .await
+            .unwrap();
 
     // GET CFS SESSION
 
@@ -199,12 +191,150 @@ async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_sessio
         )))
         .await;
 
-    let mut logs_stream = get_cfs_session_container_ansible_logs_stream(client, &cfs_session_name)
-        .await
-        .unwrap();
+    let mut logs_stream = mesa::common::kubernetes::get_cfs_session_container_ansible_logs_stream(
+        client,
+        &cfs_session_name,
+    )
+    .await
+    .unwrap();
 
     while let Some(line) = logs_stream.try_next().await.unwrap() {
         socket.send(Message::Text(format!("{}", &line))).await;
+    }
+}
+
+pub fn get_configuration_file_path() -> PathBuf {
+    // XDG Base Directory Specification
+    let project_dirs = ProjectDirs::from(
+        "local", /*qualifier*/
+        "cscs",  /*organization*/
+        "manta", /*application*/
+    );
+
+    PathBuf::from(project_dirs.unwrap().config_dir())
+}
+
+/// Reads configuration parameters related to manta from environment variables or file. If both
+/// defiend, then environment variables takes preference
+pub fn get_configuration() -> Config {
+    let mut config_path = get_configuration_file_path();
+    config_path.push("config.toml"); // ~/.config/manta/config is the file
+
+    ::config::Config::builder()
+        .add_source(::config::File::from(config_path))
+        .add_source(
+            ::config::Environment::with_prefix("MANTA")
+                .try_parsing(true)
+                .prefix_separator("_"),
+        )
+        .build()
+        .unwrap()
+}
+
+pub fn get_csm_root_cert_content(site: &str) -> Vec<u8> {
+    let mut config_path = get_configuration_file_path();
+    config_path.push(site.to_string() + "_root_cert.pem");
+
+    let mut buf = Vec::new();
+    let root_cert_file_rslt = File::open(config_path);
+
+    let _ = match root_cert_file_rslt {
+        Ok(mut file) => file.read_to_end(&mut buf),
+        Err(_) => {
+            eprintln!("Root cert file for CSM not found. Exit");
+            std::process::exit(1);
+        }
+    };
+
+    buf
+}
+
+pub async fn get_hsm_name_available_from_jwt_or_all(
+    shasta_token: &str,
+    shasta_base_url: &str,
+    shasta_root_cert: &[u8],
+) -> Vec<String> {
+    let mut realm_access_role_vec = get_claims_from_jwt_token(shasta_token)
+        .unwrap()
+        .pointer("/realm_access/roles")
+        .unwrap()
+        .as_array()
+        .unwrap_or(&Vec::new())
+        .iter()
+        .map(|role_value| role_value.as_str().unwrap().to_string())
+        .collect::<Vec<String>>();
+
+    realm_access_role_vec
+        .retain(|role| !role.eq("offline_access") && !role.eq("uma_authorization"));
+
+    if !realm_access_role_vec.is_empty() {
+        realm_access_role_vec
+    } else {
+        mesa::hsm::group::shasta::http_client::get_all(
+            shasta_token,
+            shasta_base_url,
+            shasta_root_cert,
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|hsm_value| hsm_value["label"].as_str().unwrap().to_string())
+        .collect::<Vec<String>>()
+    }
+}
+
+async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
+    let settings = get_configuration();
+
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
+
+    let shasta_base_url = site_detail_value
+        .get("shasta_base_url")
+        .unwrap()
+        .to_string();
+    let keycloak_base_url = site_detail_value
+        .get("keycloak_base_url")
+        .unwrap()
+        .to_string();
+    let k8s_api_url = site_detail_value.get("k8s_api_url").unwrap().to_string();
+
+    let settings_hsm_group_name_opt = settings.get_string("hsm_group").ok();
+
+    let shasta_root_cert = get_csm_root_cert_content("alps");
+
+    let base64_user_credentials = if let Some(usercredentials) = headers.get("authorization") {
+        usercredentials.to_str().unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    let user_credentials_raw = String::from_utf8(
+        base64::decode(base64_user_credentials.split(" ").nth(1).unwrap()).unwrap(),
+    )
+    .unwrap();
+
+    let mut user_credentials = user_credentials_raw.split(":");
+
+    let username = user_credentials.next().unwrap();
+    let password = user_credentials.next().unwrap();
+
+    let auth_token_result = mesa::common::authentication::get_token_from_shasta_endpoint(
+        &keycloak_base_url,
+        &shasta_root_cert,
+        username,
+        password,
+    )
+    .await;
+
+    match auth_token_result {
+        Ok(auth_token) => Ok(auth_token),
+        Err(_) => Err(StatusCode::FORBIDDEN),
     }
 }
 
@@ -218,12 +348,16 @@ async fn ws_console(
     ws: WebSocketUpgrade,
     user_agent: Option<TypedHeader<headers::UserAgent>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    let cookie_header = headers.get("cookie").unwrap().to_str().unwrap();
+
     let user_agent = if let Some(TypedHeader(user_agent)) = user_agent {
         user_agent.to_string()
     } else {
         String::from("Unknown browser")
     };
+
     println!("`{user_agent}` at {addr} connected.");
     // finalize the upgrade process by returning upgrade callback.
     // we can customize the callback by sending additional info such as address.
@@ -232,42 +366,23 @@ async fn ws_console(
 
 /// Actual websocket statemachine (one will be spawned per connection)
 async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
-    let shasta_base_url = "https://api.cmn.alps.cscs.ch/apis";
-    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiIzYzdlODEyMC01ZGU3LTQ1NWQtOWVlMi1mZDdhNjQ4MmZiZDQiLCJleHAiOjE2ODM4NzY4OTYsIm5iZiI6MCwiaWF0IjoxNjgzNzkwNDk2LCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjI4NWQ2ZWY0LTdlMmMtNDYwNi1iNGQ2LWJiODQ4M2U1NmE4ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.d53CpcW2tVINY6j6NAzkKxD97TdQf1Bs7Ml6UxMqrhR87zd7xk3avi-up8gqjcvBS9YEZ9_2Ldsth7YFofHEjf96HbcqB387ym0LdK18Yl0IOVAj5cW8sDF57iSktNXV0zX8ji8dqKyqD9dVZ3faH0zWZA2LAVbsPrdsliokOzBDxZhK5bj7ide2AQS6ycncSZ1ZUbqXHP_ocMATSWsjOn3evVwQ4F0Ax95l7tC9rsWyx0rNh3g8SROAGXBAJA2aMhMqkDsUf_iv7nNl3CwtTd3yqkrtQLxH4Mw1OroRwbHC1U--Id5Zf2MqGfuzEeosoLPvClJlyJNTcClJ3yFemA";
+    let settings = get_configuration();
 
-    // let gitea_base_url = "https://api.cmn.alps.cscs.ch/vcs";
-    let gitea_token: &str;
-    let vault_base_url = "https://hashicorp-vault.cscs.ch:8200";
-    let vault_role_id = "b15517de-cabb-06ba-af98-633d216c6d99";
-    let vault_secret_path = "alps";
-    let cfs_session_name: &str;
-    let k8s_api_url = "https://10.252.1.12:6442";
-
-    let configuration_name: Option<String> = None;
-    let most_recent: Option<bool> = None;
-    let layer_id: Option<&u8> = None;
-
-    // GET CFS CONFIGURATION
-
-    /* get_configuration::exec(
-    gitea_token,
-    shasta_token,
-    shasta_base_url,
-    configuration_name.as_ref(),
-    hsm_group_name.as_ref(),
-    most_recent,
-    limit.as_ref(),
-    )
-    .await; */
-
-    // GET K8S CLIENT
-
-    let shasta_k8s_secrets =
-        fetch_shasta_k8s_secrets(vault_base_url, vault_secret_path, vault_role_id).await;
-
-    let client = get_k8s_client_programmatically(k8s_api_url, shasta_k8s_secrets)
-        .await
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
         .unwrap();
+
+    let vault_base_url = site_detail_value.get("vault_base_url").unwrap().to_string();
+    let vault_role_id = site_detail_value.get("vault_role_id").unwrap().to_string();
+    let vault_secret_path = site_detail_value
+        .get("vault_secret_path")
+        .unwrap()
+        .to_string();
+    let k8s_api_url = site_detail_value.get("k8s_api_url").unwrap().to_string();
 
     // By splitting socket we can send and receive at the same time. In this example we will send
     // unsolicited messages to client based on some sort of server's internal event (i.e .timer).
@@ -275,12 +390,12 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
 
     // CONSOLE
 
-    let mut attached = mesa::manta::console::get_container_attachment_to_conman(
+    let mut attached = mesa::node::console::get_container_attachment_to_conman(
         &xname.to_string(),
-        vault_base_url,
-        vault_secret_path,
-        vault_role_id,
-        k8s_api_url,
+        &vault_base_url,
+        &vault_secret_path,
+        &vault_role_id,
+        &k8s_api_url,
     )
     .await;
 
@@ -364,45 +479,105 @@ fn process_message(msg: Message, who: SocketAddr) -> ControlFlow<(), ()> {
     ControlFlow::Continue(())
 }
 
-async fn get_hsm() -> Json<serde_json::Value> {
-    let shasta_base_url = "https://api.cmn.alps.cscs.ch/apis";
-    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiIzYzdlODEyMC01ZGU3LTQ1NWQtOWVlMi1mZDdhNjQ4MmZiZDQiLCJleHAiOjE2ODM4NzY4OTYsIm5iZiI6MCwiaWF0IjoxNjgzNzkwNDk2LCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjI4NWQ2ZWY0LTdlMmMtNDYwNi1iNGQ2LWJiODQ4M2U1NmE4ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.d53CpcW2tVINY6j6NAzkKxD97TdQf1Bs7Ml6UxMqrhR87zd7xk3avi-up8gqjcvBS9YEZ9_2Ldsth7YFofHEjf96HbcqB387ym0LdK18Yl0IOVAj5cW8sDF57iSktNXV0zX8ji8dqKyqD9dVZ3faH0zWZA2LAVbsPrdsliokOzBDxZhK5bj7ide2AQS6ycncSZ1ZUbqXHP_ocMATSWsjOn3evVwQ4F0Ax95l7tC9rsWyx0rNh3g8SROAGXBAJA2aMhMqkDsUf_iv7nNl3CwtTd3yqkrtQLxH4Mw1OroRwbHC1U--Id5Zf2MqGfuzEeosoLPvClJlyJNTcClJ3yFemA";
-    let shasta_root_cert = todo!();
-    let response = mesa::shasta::hsm::http_client::get_hsm_group_vec(
-        shasta_token,
-        shasta_base_url,
-        shasta_root_cert,
-        None,
+async fn get_hsm(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
+    let settings = get_configuration();
+
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
+
+    let shasta_base_url = site_detail_value
+        .get("shasta_base_url")
+        .unwrap()
+        .to_string();
+
+    let shasta_root_cert = get_csm_root_cert_content("alps");
+
+    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
+        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    let hsm_group_available_name_vec =
+        get_hsm_name_available_from_jwt_or_all(shasta_token, &shasta_base_url, &shasta_root_cert)
+            .await;
+
+    let response_rslt = mesa::hsm::group::shasta::http_client::get_all(
+        &shasta_token,
+        &shasta_base_url,
+        &shasta_root_cert,
     )
     .await;
-    let response_data = axum::Json(serde_json::to_value(response.as_ref().unwrap()).unwrap());
-    if response.is_ok() {
-        return response_data; // FIX THIS: make cojin::shasta::hsm::http_client::get_hsm_groups to return Value instead of Vec<Value>
+
+    // let response_data = axum::Json(serde_json::to_value(response.as_ref().unwrap()).unwrap());
+
+    if let Ok(mut response) = response_rslt {
+        response.retain(|hsm_group_value| {
+            hsm_group_available_name_vec
+                .contains(&hsm_group_value["label"].as_str().unwrap().to_string())
+        });
+
+        return Ok(Json(serde_json::to_value(response).unwrap())); // FIX THIS: make cojin::shasta::hsm::http_client::get_hsm_groups to return Value instead of Vec<Value>
     } else {
-        eprintln!("ERROR:\n{:#?}", response.unwrap());
-        return response_data;
+        eprintln!("ERROR:\n{:#?}", response_rslt.unwrap());
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 }
 
-async fn get_hsm_details(Path(hsm): Path<String>) -> Json<serde_json::Value> {
-    let shasta_base_url = "https://api.cmn.alps.cscs.ch/apis";
-    let shasta_token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJNSW5BOEFfUUd4RTJ3REI5RlNkTzRKelVYSE9wVWFqZXVVb3JXemx1QlQwIn0.eyJqdGkiOiIzYzdlODEyMC01ZGU3LTQ1NWQtOWVlMi1mZDdhNjQ4MmZiZDQiLCJleHAiOjE2ODM4NzY4OTYsIm5iZiI6MCwiaWF0IjoxNjgzNzkwNDk2LCJpc3MiOiJodHRwczovL2FwaS1ndy1zZXJ2aWNlLW5tbi5sb2NhbC9rZXljbG9hay9yZWFsbXMvc2hhc3RhIiwiYXVkIjpbImdhdGVrZWVwZXIiLCJzaGFzdGEiLCJhY2NvdW50Il0sInN1YiI6ImU5MWNjNGIzLTJlNWItNDExMC05N2Y1LWQ2YjAzYmJkMDRkYSIsInR5cCI6IkJlYXJlciIsImF6cCI6ImFkbWluLWNsaWVudCIsImF1dGhfdGltZSI6MCwic2Vzc2lvbl9zdGF0ZSI6IjI4NWQ2ZWY0LTdlMmMtNDYwNi1iNGQ2LWJiODQ4M2U1NmE4ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7InNoYXN0YSI6eyJyb2xlcyI6WyJhZG1pbiJdfSwiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwiY2xpZW50SWQiOiJhZG1pbi1jbGllbnQiLCJjbGllbnRIb3N0IjoiMTAuNDcuMTI4LjAiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC1hZG1pbi1jbGllbnQiLCJjbGllbnRBZGRyZXNzIjoiMTAuNDcuMTI4LjAifQ.d53CpcW2tVINY6j6NAzkKxD97TdQf1Bs7Ml6UxMqrhR87zd7xk3avi-up8gqjcvBS9YEZ9_2Ldsth7YFofHEjf96HbcqB387ym0LdK18Yl0IOVAj5cW8sDF57iSktNXV0zX8ji8dqKyqD9dVZ3faH0zWZA2LAVbsPrdsliokOzBDxZhK5bj7ide2AQS6ycncSZ1ZUbqXHP_ocMATSWsjOn3evVwQ4F0Ax95l7tC9rsWyx0rNh3g8SROAGXBAJA2aMhMqkDsUf_iv7nNl3CwtTd3yqkrtQLxH4Mw1OroRwbHC1U--Id5Zf2MqGfuzEeosoLPvClJlyJNTcClJ3yFemA";
-    let shasta_root_cert = todo!();
-    let hsm_group = mesa::shasta::hsm::http_client::get_hsm_group(
-        shasta_token,
-        shasta_base_url,
-        shasta_root_cert,
-        &hsm,
+async fn get_hsm_details(
+    Path(hsm): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let settings = get_configuration();
+
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
+
+    let shasta_base_url = site_detail_value
+        .get("shasta_base_url")
+        .unwrap()
+        .to_string();
+
+    let shasta_root_cert = get_csm_root_cert_content("alps");
+
+    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
+        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    let hsm_group = mesa::hsm::group::shasta::http_client::get(
+        &shasta_token,
+        &shasta_base_url,
+        &shasta_root_cert,
+        Some(&hsm),
     )
     .await
     .unwrap();
-    let hsm_groups_node_list =
-        mesa::shasta::hsm::utils::get_member_vec_from_hsm_group_value(&hsm_group);
 
-    let response =
-        mesa::manta::get_nodes_status::exec(shasta_token, shasta_base_url, shasta_root_cert, hsm_groups_node_list)
-            .await;
-    axum::Json(serde_json::to_value(response).unwrap())
+    let hsm_groups_node_list = mesa::hsm::group::shasta::utils::get_member_vec_from_hsm_group_value(
+        &hsm_group.first().unwrap(),
+    );
+
+    let response = mesa::node::utils::get_node_details(
+        &shasta_token,
+        &shasta_base_url,
+        &shasta_root_cert,
+        hsm_groups_node_list,
+    )
+    .await;
+
+    Ok(Json(serde_json::to_value(response).unwrap()))
 }
 
 async fn get_cfs_session() -> Json<serde_json::Value> {

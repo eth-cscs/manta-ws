@@ -18,6 +18,18 @@ const router = createRouter({
       component: () => import('../views/AboutView.vue')
     },
     {
+      path: '/hsm',
+      name: 'hsmgroupsummary',
+
+      component: () => import('../views/HsmGroupSummaryView.vue')
+    },
+    {
+      path: '/hsm/:hsm',
+      name: 'hsmgroupdetails',
+
+      component: () => import('../views/HsmGroupDetailsView.vue')
+    },
+    {
       path: '/console/:xname',
       name: 'console',
       component: () => import('../views/ConsoleView.vue')
@@ -37,12 +49,6 @@ const router = createRouter({
       name: 'cfssessionlogs',
       component: () => import('../views/CfsSessionLogsView.vue')
     },
-    {
-      path: '/hsm/:hsm',
-      name: 'hsmgroupdetails',
-
-      component: () => import('../views/HsmGroupDetailsView.vue')
-    }
   ]
 })
 

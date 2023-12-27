@@ -11,39 +11,49 @@ var command;
 
 var hsmItems = ref([])
 
+var authToken = ref("")
+
 const actionItems = [
-{title: "Console", value: 1, props: { prependIcon: "mdi-console-line", onClick: (xname) => {window.open("http://localhost:5173/console/" + xname, '_blank').focus();}}},
-{title: "Power on", value: 2, props: { prependIcon: "mdi-power-on"}},
-{title: "Power off", value: 3, props: { prependIcon: "mdi-power-off"}}
+  // { title: "Console", value: 1, props: { prependIcon: "mdi-console-line", onClick: (xname) => { window.open("http://localhost:5173/console/" + xname, '_blank').focus(); } } },
+  { title: "Console", value: 1, props: { prependIcon: "mdi-console-line", onClick: (xname) => { router.push('/console/' + xname); } } },
+  { title: "Power on", value: 2, props: { prependIcon: "mdi-power-on" } },
+  { title: "Power off", value: 3, props: { prependIcon: "mdi-power-off" } }
 ]
 
 // lifecycle hooks
 onMounted(() => {
+  authToken.value = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("authtoken="))
+    ?.split("=")[1];
+
+  console.log(authToken.value);
   // Get HSM groups details
   getDetails(route.params.hsm)
-  .then(result => {
+    .then(result => {
       hsmItems.value = result;
-  });
+    });
 })
 
 async function getDetails(hsm) {
-    const response = await fetch("http://localhost:3000/hsm/" + hsm, { method: "GET" });
+  const response = await fetch("http://localhost:3000/hsm/" + hsm, { method: "GET", headers: { "Authorization": "Bearer " + authToken.value } });
 
-    console.log(response);
+  console.log(response);
 
-    if (response.status === 200) {
-      let data = await response.json();
-      data.sort(function(a, b) {
-          return a.nid.localeCompare(b.nid)
-          });
-      return data.reverse();
-    } else {
-      console.error(response.statusText);
-    }
+  if (response.status === 200) {
+    let data = await response.json();
+    data.sort(function (a, b) {
+      return a.nid.localeCompare(b.nid)
+    });
+    return data.reverse();
+  } else {
+    console.error(response.statusText);
+  }
 }
 
 function goToConsole(xname) {
-  window.open("http://localhost:5173/console/" + xname, '_blank').focus()
+  // window.open("http://localhost:5173/console/" + xname, '_blank').focus()
+  router.push('/console/' + xname);
 }
 
 function getConsoleUrl(xname) {
@@ -52,22 +62,22 @@ function getConsoleUrl(xname) {
 </script>
 
 <template>
-   <v-table>
-     <thead>
-       <tr>
-         <th>XNAME</th>
-         <th>NID</th>
-         <th>Power Status</th>
-         <th>Desired Configuration</th>
-         <th>Configuration Status</th>
-         <th>Enabled</th>
-         <th>Error Count</th>
-         <th>Boot Image ID</th>
-         <th>Actions</th>
-       </tr>
-     </thead>
-     <tbody>
-       <tr v-for="item in hsmItems" :key="item.xname">
+  <v-table>
+    <thead>
+      <tr>
+        <th>XNAME</th>
+        <th>NID</th>
+        <th>Power Status</th>
+        <th>Desired Configuration</th>
+        <th>Configuration Status</th>
+        <th>Enabled</th>
+        <th>Error Count</th>
+        <th>Boot Image ID</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr v-for="item in hsmItems" :key="item.xname">
         <td><a :href="getConsoleUrl(item.xname)">{{ item.xname }}</a></td>
         <td>{{ item.nid }}</td>
         <td>{{ item.power_status }}</td>
@@ -91,9 +101,8 @@ function getConsoleUrl(xname) {
             </v-list>
           </v-menu>
         </td>
-       </tr>
-     </tbody>
-   </v-table> 
+      </tr>
+    </tbody>
+  </v-table>
 </template>
-<style>
-</style>
+<style></style>
