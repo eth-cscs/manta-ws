@@ -590,7 +590,7 @@ async fn get_cfs_session() -> Json<serde_json::Value> {
 }
 
 async fn power_off_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
-    tracing::info!("DEBUG - POWER OFF NODE {}", node);
+    tracing::info!("Power OFF node {}", node);
 
     let settings = get_configuration();
 
@@ -615,7 +615,7 @@ async fn power_off_node(Path(node): Path<String>, headers: HeaderMap) -> Result<
         return Err(StatusCode::UNAUTHORIZED);
     };
 
-    let response_rslt = mesa::capmc::http_client::node_power_off::post(
+    let response_rslt = mesa::capmc::http_client::node_power_off::post_sync(
         shasta_token,
         &shasta_base_url,
         &shasta_root_cert,
@@ -633,7 +633,7 @@ async fn power_off_node(Path(node): Path<String>, headers: HeaderMap) -> Result<
 
 #[debug_handler]
 async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
-    tracing::info!("POWER ON NODE {}", node);
+    tracing::info!("Power ON node {}", node);
 
     let settings = get_configuration();
 
@@ -658,7 +658,7 @@ async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(
         return Err(StatusCode::UNAUTHORIZED);
     };
 
-    mesa::capmc::http_client::node_power_on::post(
+    let response_rslt = mesa::capmc::http_client::node_power_on::post_sync(
         shasta_token,
         &shasta_base_url,
         &shasta_root_cert,
@@ -668,7 +668,12 @@ async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(
     )
     .await;
 
-    // Wait for node's power state to be ON
+    match response_rslt {
+        Ok(_) => Ok(()),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+
+    /* // Wait for node's power state to be ON
     let i = 0;
     while i < 60 {
         tokio::time::sleep(Duration::from_secs(2)).await;
@@ -709,10 +714,12 @@ async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(
         .await;
     }
 
-    Err(StatusCode::INTERNAL_SERVER_ERROR)
+    Err(StatusCode::INTERNAL_SERVER_ERROR) */
 }
 
 async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
+    tracing::debug!("Power RESET node {}", node);
+
     let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
@@ -736,7 +743,7 @@ async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Resul
         return Err(StatusCode::UNAUTHORIZED);
     };
 
-    mesa::capmc::http_client::node_power_off::post(
+    let response_rslt = mesa::capmc::http_client::node_power_off::post_sync(
         shasta_token,
         &shasta_base_url,
         &shasta_root_cert,
@@ -746,7 +753,12 @@ async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Resul
     )
     .await;
 
-    // Wait for node's power state to be ON
+    match response_rslt {
+        Ok(_) => Ok(()),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+
+    /* // Wait for node's power state to be ON
     let i = 0;
     while i < 60 {
         tokio::time::sleep(Duration::from_secs(2)).await;
@@ -779,5 +791,5 @@ async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Resul
         .await;
     }
 
-    Err(StatusCode::INTERNAL_SERVER_ERROR)
+    Err(StatusCode::INTERNAL_SERVER_ERROR) */
 }
