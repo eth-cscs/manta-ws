@@ -1,6 +1,7 @@
 mod jwt_utils;
 
 use axum::{
+    debug_handler,
     extract::{
         ws::{CloseFrame, Message, WebSocket},
         ConnectInfo, Path, WebSocketUpgrade,
@@ -19,7 +20,8 @@ use hyper::HeaderMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    borrow::Cow, error::Error, fs::File, io::Read, net::SocketAddr, ops::ControlFlow, path::PathBuf,
+    borrow::Cow, error::Error, fs::File, io::Read, net::SocketAddr, ops::ControlFlow,
+    path::PathBuf, time::Duration,
 };
 use tokio::{io::AsyncWriteExt, runtime::Runtime};
 use tower_http::{
@@ -62,6 +64,9 @@ async fn main() {
         .route("/cfssession/:cfssession/logs", get(ws_cfs_session_logs))
         .route("/hsm", get(get_hsm))
         .route("/hsm/:hsm", get(get_hsm_details))
+        .route("/node/:node/power-off", get(power_off_node))
+        .route("/node/:node/power-on", get(power_on_node))
+        .route("/node/:node/power-reset", get(power_reset_node))
         .layer(CorsLayer::very_permissive())
         .layer(
             TraceLayer::new_for_http()
@@ -582,4 +587,197 @@ async fn get_hsm_details(
 
 async fn get_cfs_session() -> Json<serde_json::Value> {
     Json(json!({}))
+}
+
+async fn power_off_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
+    tracing::info!("DEBUG - POWER OFF NODE {}", node);
+
+    let settings = get_configuration();
+
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
+
+    let shasta_base_url = site_detail_value
+        .get("shasta_base_url")
+        .unwrap()
+        .to_string();
+
+    let shasta_root_cert = get_csm_root_cert_content("alps");
+
+    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
+        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    let response_rslt = mesa::capmc::http_client::node_power_off::post(
+        shasta_token,
+        &shasta_base_url,
+        &shasta_root_cert,
+        vec![node.clone()],
+        Some("Web shutdown".to_string()),
+        true,
+    )
+    .await;
+
+    match response_rslt {
+        Ok(_) => Ok(()),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+#[debug_handler]
+async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
+    tracing::info!("POWER ON NODE {}", node);
+
+    let settings = get_configuration();
+
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
+
+    let shasta_base_url = site_detail_value
+        .get("shasta_base_url")
+        .unwrap()
+        .to_string();
+
+    let shasta_root_cert = get_csm_root_cert_content("alps");
+
+    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
+        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    mesa::capmc::http_client::node_power_on::post(
+        shasta_token,
+        &shasta_base_url,
+        &shasta_root_cert,
+        vec![node.clone()],
+        Some("Web shutdown".to_string()),
+        false,
+    )
+    .await;
+
+    // Wait for node's power state to be ON
+    let i = 0;
+    while i < 60 {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        let power_status_rslt = mesa::capmc::http_client::node_power_status::post(
+            shasta_token,
+            &shasta_base_url,
+            &shasta_root_cert,
+            &vec![node.clone()],
+        )
+        .await;
+
+        match power_status_rslt {
+            Ok(power_status) => {
+                tracing::debug!("NODE {} POWER STATUS:\n{:#?}", node, power_status);
+
+                if power_status["on"]
+                    .as_array()
+                    .is_some_and(|node_string| node_string.contains(&json!(node)))
+                {
+                    return Ok(());
+                } else {
+                    tracing::debug!("node {} not ON yet", node);
+                    tracing::debug!("NODE {} POWER STATUS:\n{:#?}", node, power_status);
+                }
+            }
+            Err(_) => {}
+        }
+
+        mesa::capmc::http_client::node_power_on::post(
+            shasta_token,
+            &shasta_base_url,
+            &shasta_root_cert,
+            vec![node.clone()],
+            Some("Web shutdown".to_string()),
+            false,
+        )
+        .await;
+    }
+
+    Err(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
+    let settings = get_configuration();
+
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
+
+    let shasta_base_url = site_detail_value
+        .get("shasta_base_url")
+        .unwrap()
+        .to_string();
+
+    let shasta_root_cert = get_csm_root_cert_content("alps");
+
+    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
+        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    mesa::capmc::http_client::node_power_off::post(
+        shasta_token,
+        &shasta_base_url,
+        &shasta_root_cert,
+        vec![node.clone()],
+        Some("Web shutdown".to_string()),
+        true,
+    )
+    .await;
+
+    // Wait for node's power state to be ON
+    let i = 0;
+    while i < 60 {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        let power_status = mesa::capmc::http_client::node_power_status::post(
+            shasta_token,
+            &shasta_base_url,
+            &shasta_root_cert,
+            &vec![node.clone()],
+        )
+        .await;
+
+        if power_status.is_ok_and(|power_status_value| {
+            power_status_value["on"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(node))
+        }) {
+            return Ok(());
+        }
+
+        mesa::capmc::http_client::node_power_off::post(
+            shasta_token,
+            &shasta_base_url,
+            &shasta_root_cert,
+            vec![node.clone()],
+            Some("Web shutdown".to_string()),
+            true,
+        )
+        .await;
+    }
+
+    Err(StatusCode::INTERNAL_SERVER_ERROR)
 }

@@ -15,9 +15,10 @@ var authToken = ref("")
 
 const actionItems = [
   // { title: "Console", value: 1, props: { prependIcon: "mdi-console-line", onClick: (xname) => { window.open("http://localhost:5173/console/" + xname, '_blank').focus(); } } },
-  { title: "Console", value: 1, props: { prependIcon: "mdi-console-line", onClick: (xname) => { router.push('/console/' + xname); } } },
-  { title: "Power on", value: 2, props: { prependIcon: "mdi-power-on" } },
-  { title: "Power off", value: 3, props: { prependIcon: "mdi-power-off" } }
+  { title: "Console", value: 1, props: { prependIcon: "mdi-console-line" }, doIt: (xname) => { router.push('/console/' + xname) } },
+  { title: "Power on", value: 2, props: { prependIcon: "mdi-power-on" }, doIt: (xname) => { node_power_on(xname) } },
+  { title: "Power off", value: 3, props: { prependIcon: "mdi-power-off" }, doIt: (xname) => { node_power_off(xname) } },
+  { title: "Power reset", value: 4, props: { prependIcon: "mdi-power-cycle" }, doIt: (xname) => { node_power_reset(xname) } },
 ]
 
 // lifecycle hooks
@@ -56,6 +57,50 @@ function goToConsole(xname) {
   router.push('/console/' + xname);
 }
 
+async function node_power_on(xname) {
+  console.log("POWER ON NODE " + xname);
+  try {
+    const response = await fetch("http://localhost:3000/node/" + xname + "/power-on", { method: "GET", headers: { "Authorization": "Bearer " + authToken.value } });
+
+    console.log(response);
+
+    if (response.status === 200) {
+      let data = await response.json();
+      hsmItems.value = data;
+    } else {
+      console.log("ERROR - " + data);
+      console.error("Status text: " + response.statusText);
+      console.error("Response message: " + response.message);
+    }
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
+  }
+}
+
+async function node_power_off(xname) {
+  console.log("POWER OFF NODE " + xname);
+  try {
+    const response = await fetch("http://localhost:3000/node/" + xname + "/power-off", { method: "GET", headers: { "Authorization": "Bearer " + authToken.value } });
+
+    console.log(response);
+
+    if (response.status === 200) {
+      let data = await response.json();
+      hsmItems.value = data;
+    } else {
+      console.log("ERROR - " + data);
+      console.error("Status text: " + response.statusText);
+      console.error("Response message: " + response.message);
+    }
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
+  }
+}
+
+async function node_power_reset(xname) {
+  alert("Power RESET " + xname);
+}
+
 function getConsoleUrl(xname) {
   return "http://localhost:5173/console/" + xname
 }
@@ -92,7 +137,7 @@ function getConsoleUrl(xname) {
               <v-btn icon="mdi-dots-vertical" v-bind="props" flat></v-btn>
             </template>
             <v-list>
-              <v-list-item v-for="actionItem in actionItems" @click="goToConsole(item.xname)">
+              <v-list-item v-for="actionItem in actionItems" @click="actionItem.doIt(item.xname)">
                 <v-list-item-title>{{ actionItem.title }}</v-list-item-title>
                 <template v-slot:prepend>
                   <v-icon :icon="actionItem.props.prependIcon"></v-icon>
