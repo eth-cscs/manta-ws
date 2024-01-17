@@ -664,7 +664,6 @@ async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(
         &shasta_root_cert,
         vec![node.clone()],
         Some("Web shutdown".to_string()),
-        false,
     )
     .await;
 

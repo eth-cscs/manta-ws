@@ -117,6 +117,7 @@ function getConsoleUrl(xname) {
         <th>Configuration Status</th>
         <th>Enabled</th>
         <th>Error Count</th>
+        <th>Boot configuration</th>
         <th>Boot Image ID</th>
         <th>Actions</th>
       </tr>
@@ -130,6 +131,7 @@ function getConsoleUrl(xname) {
         <td>{{ item.configuration_status }}</td>
         <td>{{ item.enabled }}</td>
         <td>{{ item.error_count }}</td>
+        <td>{{ item.boot_configuration }}</td>
         <td>{{ item.boot_image_id }}</td>
         <td>
           <v-menu>
