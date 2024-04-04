@@ -1,5 +1,22 @@
 # CAMA
 
+#;TLDR
+
+## Start API backend
+
+```
+SOCKS5="socks5h://127.0.0.1:1080" cargo run
+```
+
+### Start local web server to use web frontend
+
+```
+d assets
+npm run dev
+```
+
+Open a web browser and go to http://localhost:5173/
+
 ## Introduction
 
 Test project to explore a web client to consume Alps services

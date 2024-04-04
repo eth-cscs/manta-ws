@@ -17,13 +17,14 @@ use bytes::Bytes;
 use config::Config;
 use directories::ProjectDirs;
 use hyper::HeaderMap;
+use mesa::hsm::hw_components::NodeSummary;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     borrow::Cow, error::Error, fs::File, io::Read, net::SocketAddr, ops::ControlFlow,
-    path::PathBuf, time::Duration,
+    path::PathBuf, sync::Arc, time::Duration,
 };
-use tokio::{io::AsyncWriteExt, runtime::Runtime};
+use tokio::{io::AsyncWriteExt, runtime::Runtime, sync::Semaphore};
 use tower_http::{
     cors::CorsLayer,
     services::ServeDir,
@@ -64,6 +65,7 @@ async fn main() {
         .route("/cfssession/:cfssession/logs", get(ws_cfs_session_logs))
         .route("/hsm", get(get_hsm))
         .route("/hsm/:hsm", get(get_hsm_details))
+        .route("/hsm/:hsm/hardware", get(get_hsm_hardware))
         .route("/node/:node/power-off", get(power_off_node))
         .route("/node/:node/power-on", get(power_on_node))
         .route("/node/:node/power-reset", get(power_reset_node))
@@ -262,7 +264,7 @@ pub async fn get_hsm_name_available_from_jwt_or_all(
     let mut realm_access_role_vec = get_claims_from_jwt_token(shasta_token)
         .unwrap()
         .pointer("/realm_access/roles")
-        .unwrap()
+        .unwrap_or(&serde_json::json!([]))
         .as_array()
         .unwrap_or(&Vec::new())
         .iter()
@@ -337,9 +339,14 @@ async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
     )
     .await;
 
+    println!("DEBUG - TEST 2");
+
     match auth_token_result {
         Ok(auth_token) => Ok(auth_token),
-        Err(_) => Err(StatusCode::FORBIDDEN),
+        Err(error) => {
+            eprintln!("ERROR - Authentication failed. Reason:\n{:#?}", error);
+            Err(StatusCode::FORBIDDEN)
+        }
     }
 }
 
@@ -583,6 +590,92 @@ async fn get_hsm_details(
     .await;
 
     Ok(Json(serde_json::to_value(response).unwrap()))
+}
+
+async fn get_hsm_hardware(
+    Path(hsm): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let settings = get_configuration();
+
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
+
+    let shasta_base_url = site_detail_value
+        .get("shasta_base_url")
+        .unwrap()
+        .to_string();
+
+    let shasta_root_cert = get_csm_root_cert_content("alps");
+
+    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
+        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    let hsm_group = mesa::hsm::group::shasta::http_client::get(
+        &shasta_token,
+        &shasta_base_url,
+        &shasta_root_cert,
+        Some(&hsm),
+    )
+    .await
+    .unwrap();
+
+    let hsm_group_target_members =
+        mesa::hsm::group::shasta::utils::get_member_vec_from_hsm_group_value(
+            &hsm_group.first().unwrap(),
+        );
+
+    let mut hsm_summary: Vec<NodeSummary> = Vec::new();
+
+    let mut tasks = tokio::task::JoinSet::new();
+
+    let sem = Arc::new(Semaphore::new(5)); // CSM 1.3.1 higher number of concurrent tasks won't
+                                           // make it faster
+
+    // Get HW inventory details for target HSM group
+    for hsm_member in hsm_group_target_members.clone() {
+        let shasta_token_string = shasta_token.to_string(); // TODO: make it static
+        let shasta_base_url_string = shasta_base_url.to_string(); // TODO: make it static
+        let shasta_root_cert_vec = shasta_root_cert.to_vec();
+        let hsm_member_string = hsm_member.to_string(); // TODO: make it static
+                                                        //
+        let permit = Arc::clone(&sem).acquire_owned().await;
+
+        tracing::info!("Getting HW inventory details for node '{}'", hsm_member);
+        tasks.spawn(async move {
+            let _permit = permit; // Wait semaphore to allow new tasks https://github.com/tokio-rs/tokio/discussions/2648#discussioncomment-34885
+            mesa::hsm::hw_inventory::shasta::http_client::get_hw_inventory(
+                &shasta_token_string,
+                &shasta_base_url_string,
+                &shasta_root_cert_vec,
+                &hsm_member_string,
+            )
+            .await
+            .unwrap()
+        });
+    }
+
+    while let Some(message) = tasks.join_next().await {
+        if let Ok(mut node_hw_inventory) = message {
+            node_hw_inventory = node_hw_inventory.pointer("/Nodes/0").unwrap().clone();
+            let node_summary = NodeSummary::from_csm_value(node_hw_inventory.clone());
+            hsm_summary.push(node_summary);
+        } else {
+            tracing::error!("Failed procesing/fetching node hw information");
+        }
+    }
+
+    println!("DEBUG - result:\n{:?}", hsm_summary);
+
+    Ok(Json(serde_json::to_value(hsm_summary).unwrap()))
 }
 
 async fn get_cfs_session() -> Json<serde_json::Value> {

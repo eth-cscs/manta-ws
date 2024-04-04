@@ -1,6 +1,6 @@
 [package]
 name = "cama"
-description = "HTTP server for Manta cli"
+description = "HTTP server for Mesa"
 version = "0.1.0"
 edition = "2021"
 

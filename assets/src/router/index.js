@@ -30,6 +30,12 @@ const router = createRouter({
       component: () => import('../views/HsmGroupDetailsView.vue')
     },
     {
+      path: '/hsm/:hsm/hardware',
+      name: 'hsmgrouphardware',
+
+      component: () => import('../views/HsmGroupHardwareView.vue')
+    },
+    {
       path: '/console/:xname',
       name: 'console',
       component: () => import('../views/ConsoleView.vue')
