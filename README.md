@@ -8,14 +8,14 @@
 SOCKS5="socks5h://127.0.0.1:1080" cargo run
 ```
 
-### Start local web server to use web frontend
+## Start frontend
 
 ```
-d assets
+cd assets
 npm run dev
 ```
 
-Open a web browser and go to http://localhost:5173/
+Open a web browser and go to http://localhost:5173/ or go to the url shown by the npm dev web server after running `npm run dev` command
 
 ## Introduction
 
