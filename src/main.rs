@@ -17,7 +17,7 @@ use bytes::Bytes;
 use config::Config;
 use directories::ProjectDirs;
 use hyper::HeaderMap;
-use mesa::hsm::hw_components::NodeSummary;
+use mesa::hsm::{hw_components::NodeSummary, hw_inventory::hw_component::r#struct::NodeSummary};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -59,6 +59,7 @@ async fn main() {
         .route("/", get(root))
         // `POST /users` goes to `create_user`
         .route("/users", post(create_user))
+        .route("/cfs/health", get(get_cfs_health_check))
         .route("/authenticate", get(authenticate))
         .route("/console/:xname", get(ws_console))
         .route("/cfssession", get(get_cfs_session))
@@ -491,6 +492,39 @@ fn process_message(msg: Message, who: SocketAddr) -> ControlFlow<(), ()> {
     ControlFlow::Continue(())
 }
 
+async fn get_cfs_health_check(
+    Path(hsm): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let settings = get_configuration();
+
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
+
+    let shasta_base_url = site_detail_value
+        .get("shasta_base_url")
+        .unwrap()
+        .to_string();
+
+    let shasta_root_cert = get_csm_root_cert_content("alps");
+
+    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
+        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    let response =
+        mesa::cfs::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert).await;
+
+    Ok(Json(serde_json::to_value(response).unwrap()))
+}
+
 async fn get_hsm(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
     let settings = get_configuration();
 
@@ -519,20 +553,14 @@ async fn get_hsm(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCo
         get_hsm_name_available_from_jwt_or_all(shasta_token, &shasta_base_url, &shasta_root_cert)
             .await;
 
-    let response_rslt = mesa::hsm::group::shasta::http_client::get_all(
-        &shasta_token,
-        &shasta_base_url,
-        &shasta_root_cert,
-    )
-    .await;
+    let response_rslt =
+        mesa::hsm::group::http_client::get_all(&shasta_token, &shasta_base_url, &shasta_root_cert)
+            .await;
 
     // let response_data = axum::Json(serde_json::to_value(response.as_ref().unwrap()).unwrap());
 
     if let Ok(mut response) = response_rslt {
-        response.retain(|hsm_group_value| {
-            hsm_group_available_name_vec
-                .contains(&hsm_group_value["label"].as_str().unwrap().to_string())
-        });
+        response.retain(|hsm_group| hsm_group_available_name_vec.contains(&hsm_group.label));
 
         return Ok(Json(serde_json::to_value(response).unwrap())); // FIX THIS: make cojin::shasta::hsm::http_client::get_hsm_groups to return Value instead of Vec<Value>
     } else {
@@ -568,7 +596,7 @@ async fn get_hsm_details(
         return Err(StatusCode::UNAUTHORIZED);
     };
 
-    let hsm_group = mesa::hsm::group::shasta::http_client::get(
+    let hsm_group = mesa::hsm::group::http_client::get(
         &shasta_token,
         &shasta_base_url,
         &shasta_root_cert,
@@ -577,9 +605,8 @@ async fn get_hsm_details(
     .await
     .unwrap();
 
-    let hsm_groups_node_list = mesa::hsm::group::shasta::utils::get_member_vec_from_hsm_group_value(
-        &hsm_group.first().unwrap(),
-    );
+    let hsm_groups_node_list =
+        mesa::hsm::group::utils::get_member_vec_from_hsm_group_value(&hsm_group.first().unwrap());
 
     let response = mesa::node::utils::get_node_details(
         &shasta_token,
@@ -619,7 +646,7 @@ async fn get_hsm_hardware(
         return Err(StatusCode::UNAUTHORIZED);
     };
 
-    let hsm_group = mesa::hsm::group::shasta::http_client::get(
+    let hsm_group = mesa::hsm::group::http_client::get(
         &shasta_token,
         &shasta_base_url,
         &shasta_root_cert,
@@ -629,9 +656,7 @@ async fn get_hsm_hardware(
     .unwrap();
 
     let hsm_group_target_members =
-        mesa::hsm::group::shasta::utils::get_member_vec_from_hsm_group_value(
-            &hsm_group.first().unwrap(),
-        );
+        mesa::hsm::group::utils::get_member_vec_from_hsm_group_value(&hsm_group.first().unwrap());
 
     let mut hsm_summary: Vec<NodeSummary> = Vec::new();
 
@@ -652,7 +677,7 @@ async fn get_hsm_hardware(
         tracing::info!("Getting HW inventory details for node '{}'", hsm_member);
         tasks.spawn(async move {
             let _permit = permit; // Wait semaphore to allow new tasks https://github.com/tokio-rs/tokio/discussions/2648#discussioncomment-34885
-            mesa::hsm::hw_inventory::shasta::http_client::get_hw_inventory(
+            mesa::hsm::hw_inventory::hw_component::http_client::get_hw_inventory(
                 &shasta_token_string,
                 &shasta_base_url_string,
                 &shasta_root_cert_vec,
