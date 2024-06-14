@@ -50,11 +50,18 @@ cd assets
 npm run dev
 ```
 
-#### Test: Cli client 
+#### Test: Cli client (websocket)
 
 ```
 websocat ws://localhost:3000/console/x1000c4s0b0n0
 websocat ws://localhost:3000/cfssession/batcher-4176d230-a813-48cd-9328-b1ba7da68d99/logs
+```
+
+#### Test: Cli client (http)
+
+```
+$ curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/cfs/health
+{"db_status":"ok","kafka_status":"ok"}
 ```
 
 ### Test: Web client
