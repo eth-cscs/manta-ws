@@ -17,7 +17,7 @@ use bytes::Bytes;
 use config::Config;
 use directories::ProjectDirs;
 use hyper::HeaderMap;
-use mesa::hsm::{hw_components::NodeSummary, hw_inventory::hw_component::r#struct::NodeSummary};
+use mesa::hsm::hw_inventory::hw_component::r#struct::NodeSummary;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -278,16 +278,12 @@ pub async fn get_hsm_name_available_from_jwt_or_all(
     if !realm_access_role_vec.is_empty() {
         realm_access_role_vec
     } else {
-        mesa::hsm::group::shasta::http_client::get_all(
-            shasta_token,
-            shasta_base_url,
-            shasta_root_cert,
-        )
-        .await
-        .unwrap()
-        .iter()
-        .map(|hsm_value| hsm_value["label"].as_str().unwrap().to_string())
-        .collect::<Vec<String>>()
+        mesa::hsm::group::http_client::get_all(shasta_token, shasta_base_url, shasta_root_cert)
+            .await
+            .unwrap()
+            .iter()
+            .map(|hsm_group| hsm_group.label.clone())
+            .collect::<Vec<String>>()
     }
 }
 
@@ -492,10 +488,7 @@ fn process_message(msg: Message, who: SocketAddr) -> ControlFlow<(), ()> {
     ControlFlow::Continue(())
 }
 
-async fn get_cfs_health_check(
-    Path(hsm): Path<String>,
-    headers: HeaderMap,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+async fn get_cfs_health_check(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
     let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
@@ -519,10 +512,13 @@ async fn get_cfs_health_check(
         return Err(StatusCode::UNAUTHORIZED);
     };
 
-    let response =
-        mesa::cfs::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert).await;
+    let response: Value =
+        mesa::cfs::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?; // NOTE: sending always 500 error is a BAD practice, we
+                                                              // should do proper error handling by making mesa to return the right error code, then create the right HTTP status code based on it
 
-    Ok(Json(serde_json::to_value(response).unwrap()))
+    Ok(Json(response))
 }
 
 async fn get_hsm(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -606,7 +602,7 @@ async fn get_hsm_details(
     .unwrap();
 
     let hsm_groups_node_list =
-        mesa::hsm::group::utils::get_member_vec_from_hsm_group_value(&hsm_group.first().unwrap());
+        mesa::hsm::group::utils::get_member_vec_from_hsm_group(&hsm_group.first().unwrap());
 
     let response = mesa::node::utils::get_node_details(
         &shasta_token,
@@ -656,7 +652,7 @@ async fn get_hsm_hardware(
     .unwrap();
 
     let hsm_group_target_members =
-        mesa::hsm::group::utils::get_member_vec_from_hsm_group_value(&hsm_group.first().unwrap());
+        mesa::hsm::group::utils::get_member_vec_from_hsm_group(&hsm_group.first().unwrap());
 
     let mut hsm_summary: Vec<NodeSummary> = Vec::new();
 
