@@ -1,0 +1,17 @@
+[Unit]
+Description=cama systemd service unit file.
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cama
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -SIGTERM $MAINPID
+WorkingDirectory=/usr/local/bin
+User=root
+Group=root
+RestartSec=10
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
