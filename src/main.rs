@@ -104,12 +104,12 @@ async fn root() -> &'static str {
     "Hello, World!"
 }
 
-async fn test_whoami(headers: HeaderMap) {
-    let token = headers.get("authentication").unwrap().to_str().unwrap();
+async fn test_whoami(headers: HeaderMap) -> String {
+    let token = headers.get("authorization").unwrap().to_str().unwrap();
 
     let claims_json = get_claims_from_jwt_token(token).unwrap();
 
-    println!("Hello {}!!!", claims_json["name"].as_str().unwrap());
+    format!("Hello {}!!!", claims_json["name"].as_str().unwrap())
 }
 
 async fn test_ping() -> &'static str {
