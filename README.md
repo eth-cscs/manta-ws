@@ -31,12 +31,6 @@ As an alternative, use https://github.com/vi/websocat
 
 #### Installation
 
-```
-wget https://github.com/vi/websocat/releases/download/v1.11.0/websocat.x86_64-unknown-linux-musl
-chmod +x websocat.x86_64-unknown-linux-musl
-mv websocat.x86_64-unknown-linux-musl ~/.local/bin/websocat
-```
-
 #### Run server (local machine for testing)
 
 ```
@@ -51,6 +45,18 @@ npm run dev
 ```
 
 #### Test: Cli client (websocket)
+
+I could not get curl to work with websockets (last time I checked was2023) because the curl version installed on my laptop did not have websocket features. Instead I found websocket which is a cli to interact with websockets
+
+Install websocat
+
+```
+wget https://github.com/vi/websocat/releases/download/v1.11.0/websocat.x86_64-unknown-linux-musl
+chmod +x websocat.x86_64-unknown-linux-musl
+mv websocat.x86_64-unknown-linux-musl ~/.local/bin/websocat
+```
+
+Example
 
 ```
 websocat ws://localhost:3000/console/x1000c4s0b0n0
@@ -69,6 +75,22 @@ $ curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/cfs/health
  - Open a browser
  - Go to http://localhost:5173/console/x1000c4s0b0n0 to start xterm.js
  - Go to http://localhost:5173/cfssession/batcher-4176d230-a813-48cd-9328-b1ba7da68d99/logs
+
+### Deploy on remove server
+
+Build artifact
+
+```
+$ cargo build --release --target x86_64-unknown-linux-musl
+```
+
+Run installation script
+
+```
+$ scripts/install.sh
+```
+
+## Development
 
 #### Setup web client development environment
 
