@@ -489,8 +489,10 @@ fn process_message(msg: Message, who: SocketAddr) -> ControlFlow<(), ()> {
     ControlFlow::Continue(())
 }
 
-
-async fn get_service_health(headers: HeaderMap, service: &str) -> Result<Json<serde_json::Value>, StatusCode> {
+async fn get_service_health(
+    headers: HeaderMap,
+    service: &str,
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
@@ -513,17 +515,21 @@ async fn get_service_health(headers: HeaderMap, service: &str) -> Result<Json<se
     } else {
         return Err(StatusCode::UNAUTHORIZED);
     };
-    
+
     let response: Value = match service {
         // NOTE: sending always 500 error is a BAD practice, we
         // should do proper error handling by making mesa to return the right error code,
         // then create the right HTTP status code based on it
-        "cfs" => mesa::cfs::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert)
-                    .await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?, 
-        "bos" => mesa::bos::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert)
-                    .await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        "cfs" => {
+            mesa::cfs::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        }
+        "bos" => {
+            mesa::bos::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        }
         _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
@@ -531,27 +537,24 @@ async fn get_service_health(headers: HeaderMap, service: &str) -> Result<Json<se
 }
 
 async fn get_cfs_health_check(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
-    let response = 
-        get_service_health(headers, "cfs")
+    let response = get_service_health(headers, "cfs")
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        // NOTE: sending always 500 error is a BAD practice, we
-        // should do proper error handling by making mesa to return the right error code, 
-        // then create the right HTTP status code based on it
-        
+    // NOTE: sending always 500 error is a BAD practice, we
+    // should do proper error handling by making mesa to return the right error code,
+    // then create the right HTTP status code based on it
+
     Ok(response)
 }
 
 async fn get_bos_health_check(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
-
-    let response = 
-        get_service_health(headers, "bos")
+    let response = get_service_health(headers, "bos")
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        // NOTE: sending always 500 error is a BAD practice, we
-        // should do proper error handling by making mesa to return the right error code, 
-        // then create the right HTTP status code based on it
-        
+    // NOTE: sending always 500 error is a BAD practice, we
+    // should do proper error handling by making mesa to return the right error code,
+    // then create the right HTTP status code based on it
+
     Ok(response)
 }
 
