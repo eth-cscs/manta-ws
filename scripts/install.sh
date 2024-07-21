@@ -11,8 +11,14 @@ scp ./scripts/alps_root_cert.pem root@hashicorp-vault:/root/.config/manta/alps_r
 # copy systemd unit file
 scp ./scripts/cama.service root@hashicorp-vault:/etc/systemd/system/cama.service
 
+# stop cama
+ssh root@hashicorp-vault.cscs.ch systemctl stop cama
+
 # copy cama binary
 scp ./target/x86_64-unknown-linux-musl/release/cama root@hashicorp-vault:/usr/local/bin/cama
+
+# start cama
+ssh root@hashicorp-vault.cscs.ch systemctl start cama
 
 ssh root@hashicorp-vault systemctl daemon-reload
 
