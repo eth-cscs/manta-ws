@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 # mesa = { path = "../mesa" }
-mesa = "0.37.9"
+mesa = "0.40.9"
 directories = "4.0.1" # XDG Base Directory Specification
 config = { version = "0.13.2", features = ["toml"] } # used to read manta configuration file
 axum = { version = "0.6.15", features = ["headers", "ws", "macros"] }
