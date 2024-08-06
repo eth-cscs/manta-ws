@@ -8,12 +8,15 @@ use axum::{
     debug_handler,
     extract::{
         ws::{Message, WebSocket},
-        ConnectInfo, Path, WebSocketUpgrade,
+        ConnectInfo, Path,
+        WebSocketUpgrade,
+        /* ws::{CloseFrame, Message, WebSocket},
+        ConnectInfo, Path, Query, WebSocketUpgrade, */
     },
     headers,
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router, TypedHeader,
 };
 use config::Config;
@@ -22,10 +25,7 @@ use hyper::HeaderMap;
 use mesa::hsm::hw_inventory::hw_component::r#struct::NodeSummary;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{
-    fs::File, io::Read, net::SocketAddr, ops::ControlFlow,
-    path::PathBuf, sync::Arc,
-};
+use std::{fs::File, io::Read, net::SocketAddr, ops::ControlFlow, path::PathBuf, sync::Arc};
 use tokio::{io::AsyncWriteExt, sync::Semaphore};
 use tower_http::{
     cors::CorsLayer,
@@ -76,6 +76,10 @@ async fn main() {
         .route("/node/:node/power-off", get(power_off_node))
         .route("/node/:node/power-on", get(power_on_node))
         .route("/node/:node/power-reset", get(power_reset_node))
+        .route(
+            "/migrate/target/:target/parent/:parent",
+            put(node_migration),
+        )
         .layer(CorsLayer::very_permissive())
         .layer(
             TraceLayer::new_for_http()
@@ -827,49 +831,6 @@ async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(
         Ok(_) => Ok(()),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
-
-    /* // Wait for node's power state to be ON
-    let i = 0;
-    while i < 60 {
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        let power_status_rslt = mesa::capmc::http_client::node_power_status::post(
-            shasta_token,
-            &shasta_base_url,
-            &shasta_root_cert,
-            &vec![node.clone()],
-        )
-        .await;
-
-        match power_status_rslt {
-            Ok(power_status) => {
-                tracing::debug!("NODE {} POWER STATUS:\n{:#?}", node, power_status);
-
-                if power_status["on"]
-                    .as_array()
-                    .is_some_and(|node_string| node_string.contains(&json!(node)))
-                {
-                    return Ok(());
-                } else {
-                    tracing::debug!("node {} not ON yet", node);
-                    tracing::debug!("NODE {} POWER STATUS:\n{:#?}", node, power_status);
-                }
-            }
-            Err(_) => {}
-        }
-
-        mesa::capmc::http_client::node_power_on::post(
-            shasta_token,
-            &shasta_base_url,
-            &shasta_root_cert,
-            vec![node.clone()],
-            Some("Web shutdown".to_string()),
-            false,
-        )
-        .await;
-    }
-
-    Err(StatusCode::INTERNAL_SERVER_ERROR) */
 }
 
 async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
@@ -912,39 +873,26 @@ async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Resul
         Ok(_) => Ok(()),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
+}
 
-    /* // Wait for node's power state to be ON
-    let i = 0;
-    while i < 60 {
-        tokio::time::sleep(Duration::from_secs(2)).await;
+#[derive(Deserialize, Debug)]
+pub struct QueryParams {
+    xname: String,
+}
 
-        let power_status = mesa::capmc::http_client::node_power_status::post(
-            shasta_token,
-            &shasta_base_url,
-            &shasta_root_cert,
-            &vec![node.clone()],
-        )
-        .await;
-
-        if power_status.is_ok_and(|power_status_value| {
-            power_status_value["on"]
-                .as_array()
-                .unwrap()
-                .contains(&json!(node))
-        }) {
-            return Ok(());
-        }
-
-        mesa::capmc::http_client::node_power_off::post(
-            shasta_token,
-            &shasta_base_url,
-            &shasta_root_cert,
-            vec![node.clone()],
-            Some("Web shutdown".to_string()),
-            true,
-        )
-        .await;
-    }
-
-    Err(StatusCode::INTERNAL_SERVER_ERROR) */
+async fn node_migration(
+    Path((target, parent)): Path<(String, String)>,
+    Query(query_param): Query<QueryParams>,
+) {
+    println!("--- OK ---");
+    println!("Target: {}", target);
+    println!("Parent: {}", parent);
+    println!(
+        "xname: {:?}",
+        query_param
+            .xname
+            .split(",")
+            .map(|elem| elem.trim())
+            .collect::<Vec<&str>>()
+    );
 }
