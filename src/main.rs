@@ -77,7 +77,7 @@ async fn main() {
         .route("/node/:node/power-on", get(power_on_node))
         .route("/node/:node/power-reset", get(power_reset_node))
         .route(
-            "/migrate/target/:target/parent/:parent",
+            "/node-migration/target/:target/parent/:parent",
             put(node_migration),
         )
         .layer(CorsLayer::very_permissive())
@@ -876,23 +876,92 @@ async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Resul
 }
 
 #[derive(Deserialize, Debug)]
-pub struct QueryParams {
-    xname: String,
+pub struct NodeMigrationQueryParams {
+    ids: String,
 }
 
 async fn node_migration(
-    Path((target, parent)): Path<(String, String)>,
-    Query(query_param): Query<QueryParams>,
-) {
-    println!("--- OK ---");
-    println!("Target: {}", target);
-    println!("Parent: {}", parent);
-    println!(
-        "xname: {:?}",
-        query_param
-            .xname
-            .split(",")
-            .map(|elem| elem.trim())
-            .collect::<Vec<&str>>()
+    Path((target, parent, create_hsm_group)): Path<(String, String, bool)>,
+    Query(query_param): Query<NodeMigrationQueryParams>,
+    headers: HeaderMap,
+) -> Result<(), StatusCode> {
+    tracing::info!(
+        "Migratenodes '{}' from parent '{}' to target {}",
+        query_param.ids,
+        parent,
+        target
     );
+
+    let settings = get_configuration();
+
+    let site_detail_hashmap = settings.get_table("sites").unwrap();
+    let site_detail_value = site_detail_hashmap
+        .get("alps")
+        .unwrap()
+        .clone()
+        .into_table()
+        .unwrap();
+
+    let shasta_base_url = site_detail_value
+        .get("shasta_base_url")
+        .unwrap()
+        .to_string();
+
+    let shasta_root_cert = get_csm_root_cert_content("alps");
+
+    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
+        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
+
+    let new_target_hsm_members = query_param
+        .ids
+        .split(',')
+        .map(|xname| xname.trim())
+        .collect::<Vec<&str>>();
+
+    if mesa::hsm::group::http_client::get(
+        shasta_token,
+        &shasta_base_url,
+        &shasta_root_cert,
+        Some(&target.to_string()),
+    )
+    .await
+    .is_ok()
+    {
+        tracing::debug!("The HSM group {} exists, good.", target);
+    } else {
+        if create_hsm_group {
+            tracing::info!("HSM group {} does not exist, but the option to create the group has been selected, creating it now.", target.to_string());
+            mesa::hsm::group::http_client::create_new_hsm_group(
+                shasta_token,
+                &shasta_base_url,
+                &shasta_root_cert,
+                &target,
+                &[],
+                "false",
+                "",
+                &[],
+            )
+            .await
+            .expect("Unable to create new HSM group");
+        } else {
+            tracing::error!("HSM group {} does not exist, but the option to create the group was NOT specificied, cannot continue.", target.to_string());
+            return Err(StatusCode::UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    mesa::hsm::group::utils::migrate_hsm_members(
+        shasta_token,
+        &shasta_base_url,
+        &shasta_root_cert,
+        &target,
+        &parent,
+        new_target_hsm_members,
+        true,
+    )
+    .await;
+
+    Ok(())
 }
