@@ -62,6 +62,7 @@ async fn main() {
         // `GET /` goes to `root`
         .route("/", get(root))
         // `POST /users` goes to `create_user`
+        .route("/version", get(get_version))
         .route("/users", post(create_user))
         .route("/kernel-parameters", get(get_kernel_parameters))
         .route("/cfs/health", get(get_cfs_health_check))
@@ -107,6 +108,10 @@ struct CreateUser {
 struct User {
     id: u64,
     username: String,
+}
+
+async fn get_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
 }
 
 async fn root() -> &'static str {
