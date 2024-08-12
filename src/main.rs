@@ -883,19 +883,24 @@ async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Resul
 #[derive(Deserialize, Debug)]
 pub struct NodeMigrationQueryParams {
     ids: String,
+    create_hsm_group: bool,
 }
 
 async fn node_migration(
-    Path((target, parent, create_hsm_group)): Path<(String, String, bool)>,
+    Path((target, parent)): Path<(String, String)>,
     Query(query_param): Query<NodeMigrationQueryParams>,
     headers: HeaderMap,
 ) -> Result<(), StatusCode> {
     tracing::info!(
-        "Migratenodes '{}' from parent '{}' to target {}",
+        "Migrate nodes '{}' from parent '{}' to target {}. Create HSM group if doesn't exists? {}",
         query_param.ids,
         parent,
-        target
+        target,
+        query_param.create_hsm_group
     );
+
+    let ids = query_param.ids;
+    let create_hsm_group = query_param.create_hsm_group;
 
     let settings = get_configuration();
 
@@ -920,8 +925,7 @@ async fn node_migration(
         return Err(StatusCode::UNAUTHORIZED);
     };
 
-    let new_target_hsm_members = query_param
-        .ids
+    let new_target_hsm_members = ids
         .split(',')
         .map(|xname| xname.trim())
         .collect::<Vec<&str>>();
