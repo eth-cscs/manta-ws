@@ -25,3 +25,4 @@ tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 base64 = "0.13.1"
 tower-http = { version = "0.4.0", features = ["fs", "trace", "cors"] }
 futures-util = { version = "0.3.28", default-features = false, features = ["sink", "std"] }
+chrono = "0.4.38"
