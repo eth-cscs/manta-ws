@@ -1,9 +1,13 @@
+mod backend_api;
+mod handlers;
+mod http_response;
 mod jwt_utils;
+mod log;
 
 use axum::{
     debug_handler,
     extract::{
-        ws::{CloseFrame, Message, WebSocket},
+        ws::{Message, WebSocket},
         ConnectInfo, Path, WebSocketUpgrade,
     },
     headers,
@@ -12,8 +16,6 @@ use axum::{
     routing::{get, post},
     Json, Router, TypedHeader,
 };
-use base64::decode;
-use bytes::Bytes;
 use config::Config;
 use directories::ProjectDirs;
 use hyper::HeaderMap;
@@ -21,10 +23,10 @@ use mesa::hsm::hw_inventory::hw_component::r#struct::NodeSummary;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    borrow::Cow, error::Error, fs::File, io::Read, net::SocketAddr, ops::ControlFlow,
-    path::PathBuf, sync::Arc, time::Duration,
+    fs::File, io::Read, net::SocketAddr, ops::ControlFlow,
+    path::PathBuf, sync::Arc,
 };
-use tokio::{io::AsyncWriteExt, runtime::Runtime, sync::Semaphore};
+use tokio::{io::AsyncWriteExt, sync::Semaphore};
 use tower_http::{
     cors::CorsLayer,
     services::ServeDir,
@@ -34,8 +36,10 @@ use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::Subs
 
 use crate::jwt_utils::get_claims_from_jwt_token;
 
-use futures_util::{SinkExt, Stream, StreamExt, TryStreamExt};
-use tokio_util::io::{ReaderStream, SinkWriter};
+use futures_util::{SinkExt, StreamExt, TryStreamExt};
+use tokio_util::io::ReaderStream;
+
+use crate::handlers::*;
 
 #[tokio::main]
 async fn main() {
@@ -59,6 +63,7 @@ async fn main() {
         .route("/", get(root))
         // `POST /users` goes to `create_user`
         .route("/users", post(create_user))
+        .route("/kernel-parameters", get(get_kernel_parameters))
         .route("/cfs/health", get(get_cfs_health_check))
         .route("/bos/health", get(get_bos_health_check))
         .route("/authenticate", get(authenticate))
