@@ -155,7 +155,7 @@ async fn ws_cfs_session_logs(
     ws.on_upgrade(move |socket| get_cfs_session_logs(socket, addr, cfs_session_name))
 }
 
-async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_session_name: String) {
+async fn get_cfs_session_logs(mut socket: WebSocket, _who: SocketAddr, cfs_session_name: String) {
     let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
@@ -198,7 +198,7 @@ async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_sessio
 
     // GET CFS SESSION LOGS
 
-    socket
+    let _ = socket
         .send(Message::Text(format!(
             "Fetching CFS session logs for {} ...",
             cfs_session_name
@@ -213,7 +213,7 @@ async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_sessio
     .unwrap();
 
     while let Some(line) = logs_stream.try_next().await.unwrap() {
-        socket.send(Message::Text(format!("{}", &line))).await;
+        let _ = socket.send(Message::Text(format!("{}", &line))).await;
     }
 }
 
@@ -304,7 +304,7 @@ async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
         .into_table()
         .unwrap();
 
-    let shasta_base_url = site_detail_value
+    let _shasta_base_url = site_detail_value
         .get("shasta_base_url")
         .unwrap()
         .to_string();
@@ -312,9 +312,9 @@ async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
         .get("keycloak_base_url")
         .unwrap()
         .to_string();
-    let k8s_api_url = site_detail_value.get("k8s_api_url").unwrap().to_string();
+    let _k8s_api_url = site_detail_value.get("k8s_api_url").unwrap().to_string();
 
-    let settings_hsm_group_name_opt = settings.get_string("hsm_group").ok();
+    let _settings_hsm_group_name_opt = settings.get_string("hsm_group").ok();
 
     let shasta_root_cert = get_csm_root_cert_content("alps");
 
@@ -365,7 +365,7 @@ async fn ws_console(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let cookie_header = headers.get("cookie").unwrap().to_str().unwrap();
+    let _cookie_header = headers.get("cookie").unwrap().to_str().unwrap();
 
     let user_agent = if let Some(TypedHeader(user_agent)) = user_agent {
         user_agent.to_string()
@@ -380,7 +380,7 @@ async fn ws_console(
 }
 
 /// Actual websocket statemachine (one will be spawned per connection)
-async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
+async fn handle_socket(socket: WebSocket, _who: SocketAddr, xname: String) {
     let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
@@ -419,29 +419,29 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
 
     let mut stdin_writer = attached.stdin().unwrap();
 
-    let send_task = tokio::spawn(async move {
-        sender
-            .send(Message::Text(format!("Connected to {}\n\r", xname)))
-            .await;
+    let _send_task = tokio::spawn(async move {
+        let _ = sender
+                    .send(Message::Text(format!("Connected to {}\n\r", xname)))
+                    .await;
 
-        sender
-            .send(Message::Text(
-                "User &. key combination to exit the console\n\r".to_string(),
-            ))
-            .await;
+        let _ = sender
+                    .send(Message::Text(
+                        "User &. key combination to exit the console\n\r".to_string(),
+                    ))
+                    .await;
 
-        stdout_stream
-            .map(|bytes| {
-                Ok(Message::Text(
-                    String::from_utf8(bytes.unwrap().to_vec()).unwrap(),
-                ))
-            })
-            .forward(sender)
-            .await;
+        let _ = stdout_stream
+                    .map(|bytes| {
+                        Ok(Message::Text(
+                            String::from_utf8(bytes.unwrap().to_vec()).unwrap(),
+                        ))
+                    })
+                    .forward(sender)
+                    .await;
     });
 
     // This second task will receive messages from client and print them on server console
-    let recv_task = tokio::spawn(async move {
+    let _recv_task = tokio::spawn(async move {
         while let Some(message) = receiver.next().await {
             match message.as_ref().unwrap() {
                 Message::Close(_) => {
@@ -452,7 +452,7 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
                     let msg = message.unwrap();
                     let value = msg.to_text().unwrap();
                     println!("Message from xterm web client:\n{:#?}", value);
-                    stdin_writer.write_all(value.as_bytes()).await;
+                    let _ = stdin_writer.write_all(value.as_bytes()).await;
                 }
             }
         }
@@ -461,6 +461,7 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
 }
 
 /// helper to print contents of messages to stdout. Has special treatment for Close.
+#[allow(dead_code)]
 fn process_message(msg: Message, who: SocketAddr) -> ControlFlow<(), ()> {
     match msg {
         Message::Text(t) => {
