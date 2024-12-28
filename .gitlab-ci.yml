@@ -1,6 +1,7 @@
 default:
   tags:
-    - rancher-shared
+    - Fulen
+    - K8s
 
 stages:
   - build
