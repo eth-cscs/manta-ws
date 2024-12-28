@@ -1,7 +1,6 @@
 default:
   tags:
-    - adp
-    - k8s
+    - rancher-shared
 
 stages:
   - build
