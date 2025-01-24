@@ -1,14 +1,12 @@
 default:
   tags:
     - rancher-shared
+  image: rust:1.83.0
 
 stages:
   - build
   - test
-  - deploy
-
-default:
-  image: rust:1.83.0
+  - deploy  
 
 build_a:
   stage: build
