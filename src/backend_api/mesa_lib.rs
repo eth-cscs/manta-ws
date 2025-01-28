@@ -1,15 +1,14 @@
 use axum::http::StatusCode;
 use std::collections::HashMap;
 
-use mesa::bss::bootparameters::{
-    http_client::get as boot_parameters_get,
-    BootParameters,
-};
+use mesa::bss::{http_client::get as boot_parameters_get, types::BootParameters};
 
 use crate::backend_api::*;
 
-pub async fn get_kernel_parameters_from_mesa(config: ReqCfg, xnames: &[String]) -> Result<HashMap<String, String>, (StatusCode, String)> {
-
+pub async fn get_kernel_parameters_from_mesa(
+    config: ReqCfg,
+    xnames: &[String],
+) -> Result<HashMap<String, String>, (StatusCode, String)> {
     let boot_param_vec: Vec<BootParameters> = boot_parameters_get(
         config.auth_token.as_str(),
         config.site_cfg.shasta_base_url.as_str(),

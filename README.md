@@ -59,8 +59,8 @@ mv websocat.x86_64-unknown-linux-musl ~/.local/bin/websocat
 Example
 
 ```
-websocat ws://localhost:3000/console/x1000c4s0b0n0
-websocat ws://localhost:3000/cfssession/batcher-4176d230-a813-48cd-9328-b1ba7da68d99/logs
+websocat -E ws://localhost:3000/console/x1000c4s0b0n0
+websocat -E ws://localhost:3000/cfssession/batcher-4176d230-a813-48cd-9328-b1ba7da68d99/logs
 ```
 
 #### Test: Cli client (http)

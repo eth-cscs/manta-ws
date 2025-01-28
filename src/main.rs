@@ -21,7 +21,7 @@ use axum::{
 use config::Config;
 use directories::ProjectDirs;
 use hyper::HeaderMap;
-use mesa::hsm::hw_inventory::hw_component::r#struct::NodeSummary;
+use mesa::{common::kubernetes, hsm::hw_inventory::hw_component::types::NodeSummary};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{fs::File, io::Read, net::SocketAddr, ops::ControlFlow, path::PathBuf, sync::Arc};
@@ -206,22 +206,68 @@ async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_sessio
 
     // GET CFS SESSION LOGS
 
-    socket
+    let _ = socket
         .send(Message::Text(format!(
             "Fetching CFS session logs for {} ...",
             cfs_session_name
         )))
         .await;
 
-    let mut logs_stream = mesa::common::kubernetes::get_cfs_session_container_ansible_logs_stream(
-        client,
-        &cfs_session_name,
-    )
-    .await
-    .unwrap();
+    let (ansible_container, cfs_session_pod, pods_api) =
+        kubernetes::get_cfs_session_container_ansible_logs_details(client, &cfs_session_name)
+            .await
+            .unwrap();
 
-    while let Some(line) = logs_stream.try_next().await.unwrap() {
-        socket.send(Message::Text(format!("{}", &line))).await;
+    let mut container_status =
+        kubernetes::get_container_status(&cfs_session_pod, &ansible_container.name);
+
+    let mut attempt = 0;
+    let max_attempts = 3;
+
+    if container_status.as_ref().unwrap().terminated.is_some() {
+        // Print CFS session logs already terminated on screen
+        let logs_stream_rslt =
+            kubernetes::get_container_logs_stream(&ansible_container, &cfs_session_pod, &pods_api)
+                .await;
+
+        if let Ok(mut logs_stream) = logs_stream_rslt {
+            while let Some(line) = logs_stream.try_next().await.unwrap() {
+                if line.is_empty() {
+                    // FIXME: This is a hack to make sure that the logs are displayed properly
+                    // because for some reason websocat stops displaying logs if an empty line is
+                    // sent
+                    let _ = socket.send(Message::Text(" ".to_string())).await;
+                } else {
+                    let _ = socket.send(Message::Text(line)).await;
+                }
+            }
+        }
+    } else {
+        // Print current CFS session logs on screen
+        while container_status.as_ref().unwrap().running.is_some() && attempt < max_attempts {
+            let logs_stream_rslt = kubernetes::get_container_logs_stream(
+                &ansible_container,
+                &cfs_session_pod,
+                &pods_api,
+            )
+            .await;
+
+            if let Ok(mut logs_stream) = logs_stream_rslt {
+                while let Ok(line_opt) = logs_stream.try_next().await {
+                    if let Some(line) = line_opt {
+                        println!("{}", line);
+                        let _ = socket.send(Message::Text(line)).await;
+                    } else {
+                        attempt += 1;
+                    }
+                }
+            } else {
+                attempt += 1;
+            }
+
+            container_status =
+                kubernetes::get_container_status(&cfs_session_pod, &ansible_container.name);
+        }
     }
 }
 
@@ -427,18 +473,18 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
 
     let mut stdin_writer = attached.stdin().unwrap();
 
-    let send_task = tokio::spawn(async move {
-        sender
+    let _send_task = tokio::spawn(async move {
+        let _ = sender
             .send(Message::Text(format!("Connected to {}\n\r", xname)))
             .await;
 
-        sender
+        let _ = sender
             .send(Message::Text(
                 "User &. key combination to exit the console\n\r".to_string(),
             ))
             .await;
 
-        stdout_stream
+        let _ = stdout_stream
             .map(|bytes| {
                 Ok(Message::Text(
                     String::from_utf8(bytes.unwrap().to_vec()).unwrap(),
@@ -449,7 +495,7 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
     });
 
     // This second task will receive messages from client and print them on server console
-    let recv_task = tokio::spawn(async move {
+    let _recv_task = tokio::spawn(async move {
         while let Some(message) = receiver.next().await {
             match message.as_ref().unwrap() {
                 Message::Close(_) => {
@@ -460,7 +506,7 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
                     let msg = message.unwrap();
                     let value = msg.to_text().unwrap();
                     println!("Message from xterm web client:\n{:#?}", value);
-                    stdin_writer.write_all(value.as_bytes()).await;
+                    let _ = stdin_writer.write_all(value.as_bytes()).await;
                 }
             }
         }
@@ -538,11 +584,9 @@ async fn get_service_health(
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         }
-        "bos" => {
-            mesa::bos::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        }
+        "bos" => mesa::bos::health_check::get(&shasta_token, &shasta_base_url, &shasta_root_cert)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
         _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
@@ -942,7 +986,7 @@ async fn node_migration(
     } else {
         if create_hsm_group {
             tracing::info!("HSM group {} does not exist, but the option to create the group has been selected, creating it now.", target.to_string());
-            mesa::hsm::group::http_client::create_new_hsm_group(
+            mesa::hsm::group::http_client::create_new_group(
                 shasta_token,
                 &shasta_base_url,
                 &shasta_root_cert,

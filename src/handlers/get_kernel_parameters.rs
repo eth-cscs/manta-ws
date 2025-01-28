@@ -21,7 +21,7 @@ pub async fn get_kernel_parameters(
     let dc = input_map.get("dc").unwrap().first().unwrap();
     let xnames = input_map.get("node").unwrap();
 
-    let cfg = match get_req_cfg(headers, dc.to_string()) {
+    let cfg = match get_req_cfg(&headers, dc.to_string()) {
         Ok(good) => good,
         Err(e) => return e,
     };
