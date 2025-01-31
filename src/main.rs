@@ -89,7 +89,7 @@ async fn main() {
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    tracing::debug!("listening on {}", addr);
+    println!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await
@@ -1004,7 +1004,7 @@ async fn node_migration(
         }
     }
 
-    mesa::hsm::group::utils::migrate_hsm_members(
+    let _ = mesa::hsm::group::utils::migrate_hsm_members(
         shasta_token,
         &shasta_base_url,
         &shasta_root_cert,
