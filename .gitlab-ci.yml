@@ -25,9 +25,10 @@ variables:
 # Build the Docker image
 dockerize:
   stage: dockerize
-  image: docker:20.10.16  # Use the Docker image to run Docker commands
+  image: docker:24.0.5  # Use the Docker image to run Docker commands
   services:
-    - docker:19.03.12-dind  # Docker-in-Docker to build the image inside CI
+    - name: docker:24.0.5-dind  # Docker-in-Docker to build the image inside CI
+
   script:
     - docker version  # Check Docker version to ensure it's available
     - docker build -t $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest .  # Build the Docker image
@@ -38,9 +39,9 @@ dockerize:
 # Push the Docker image to the registry
 push_to_registry:
   stage: push
-  image: docker:20.10.16
+  image: docker:24.0.5  # Use the Docker image to run Docker commands
   services:
-    - docker:19.03.12-dind
+    - name: docker:24.0.5-dind  # Docker-in-Docker to build the image inside CI
   script:
     - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin  # Login to Docker registry
     - docker push $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest  # Push the image to the registry
