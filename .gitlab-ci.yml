@@ -1,45 +1,44 @@
-default:
-  tags:
-    - rancher-shared
-  image: rust:1.83.0
-
 stages:
-  - build
-  - test
-  - deploy  
+  # - build
+  - dockerize
+  - push
 
-build_a:
-  stage: build
-  script:
-    - echo "This job builds something."
+variables:
+  DOCKER_IMAGE_NAME: "docker/alps/manta-ws"  # Change this to your Docker Hub image name
+  DOCKER_REGISTRY: "jfrog.svc.cscs.ch"  # Change this to GitLab's container registry if using that (e.g., registry.gitlab.com)
 
-build_b:
-  stage: build
-  script:
-    - echo "This job builds something else."
+# Install Rust and build the project
+# build_rust_binary:
+#   stage: build
+#   image: rust:1.84.0  # Use the official Rust Docker image
+#   script:
+#     - rustup update
+#     - cargo build --release  # Build the Rust binary in release mode
+#   artifacts:
+#     paths:
+#       - target/release/your-binary  # Change `your-binary` to the name of your compiled binary
 
-test_a:
-  stage: test
+# Build the Docker image
+dockerize:
+  stage: dockerize
+  image: docker:20.10.16  # Use the Docker image to run Docker commands
+  services:
+    - docker:19.03.12-dind  # Docker-in-Docker to build the image inside CI
   script:
-    - echo "This job tests something. It will only run when all jobs in the"
-    - echo "build stage are complete."
+    - docker version  # Check Docker version to ensure it's available
+    - docker build -t $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest .  # Build the Docker image
+  artifacts:
+    paths:
+      - Dockerfile  # Optionally keep Dockerfile if needed for later stages
 
-test_b:
-  stage: test
+# Push the Docker image to the registry
+push_to_registry:
+  stage: push
+  image: docker:20.10.16
+  services:
+    - docker:19.03.12-dind
   script:
-    - echo "This job tests something else. It will only run when all jobs in the"
-    - echo "build stage are complete too. It will start at about the same time as test_a."
-
-deploy_a:
-  stage: deploy
-  script:
-    - echo "This job deploys something. It will only run when all jobs in the"
-    - echo "test stage complete."
-  environment: production
-
-deploy_b:
-  stage: deploy
-  script:
-    - echo "This job deploys something else. It will only run when all jobs in the"
-    - echo "test stage complete. It will start at about the same time as deploy_a."
-  environment: production
+    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin  # Login to Docker registry
+    - docker push $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest  # Push the image to the registry
+  only:
+    - main  # Only run on main branch (you can adjust this)
