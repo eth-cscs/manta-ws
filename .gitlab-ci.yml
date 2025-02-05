@@ -25,13 +25,11 @@ variables:
 # Build the Docker image
 dockerize:
   stage: dockerize
-  image: docker:24.0.5  # Use the Docker image to run Docker commands
-  services:
-    - name: docker:24.0.5-dind  # Docker-in-Docker to build the image inside CI
+  image: quay.io/podman/stable  # Use the Docker image to run Docker commands
 
   script:
-    - docker version  # Check Docker version to ensure it's available
-    - docker build -t $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest .  # Build the Docker image
+    - podman version  # Check Docker version to ensure it's available
+    - podman build -t $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest .  # Build the Docker image
   artifacts:
     paths:
       - Dockerfile  # Optionally keep Dockerfile if needed for later stages
@@ -40,8 +38,6 @@ dockerize:
 push_to_registry:
   stage: push
   image: docker:24.0.5  # Use the Docker image to run Docker commands
-  services:
-    - name: docker:24.0.5-dind  # Docker-in-Docker to build the image inside CI
   script:
     - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin  # Login to Docker registry
     - docker push $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest  # Push the image to the registry
