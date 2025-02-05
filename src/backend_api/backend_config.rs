@@ -104,9 +104,9 @@ fn get_site_cfg(site: String) -> Result<SiteCfg, String> {
     let shasta_root_cert = get_csm_root_cert_content(&site)?;
 
     let site_cfg = SiteCfg {
-        site: site,
+        site,
         shasta_base_url: shasta_base_url.to_string(),
-        shasta_root_cert: shasta_root_cert,
+        shasta_root_cert,
     };
 
     Ok(site_cfg)

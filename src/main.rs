@@ -163,7 +163,7 @@ async fn ws_cfs_session_logs(
     ws.on_upgrade(move |socket| get_cfs_session_logs(socket, addr, cfs_session_name))
 }
 
-async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_session_name: String) {
+async fn get_cfs_session_logs(mut socket: WebSocket, _who: SocketAddr, cfs_session_name: String) {
     let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
@@ -189,7 +189,8 @@ async fn get_cfs_session_logs(mut socket: WebSocket, who: SocketAddr, cfs_sessio
         &vault_secret_path,
         &vault_role_id,
     )
-    .await;
+    .await
+    .expect("ERROR - Unable to fetch K8s secrets");
 
     let client =
         mesa::common::kubernetes::get_k8s_client_programmatically(&k8s_api_url, shasta_k8s_secrets)
@@ -358,17 +359,17 @@ async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
         .into_table()
         .unwrap();
 
-    let shasta_base_url = site_detail_value
-        .get("shasta_base_url")
-        .unwrap()
-        .to_string();
+    /* let shasta_base_url = site_detail_value
+    .get("shasta_base_url")
+    .unwrap()
+    .to_string(); */
     let keycloak_base_url = site_detail_value
         .get("keycloak_base_url")
         .unwrap()
         .to_string();
-    let k8s_api_url = site_detail_value.get("k8s_api_url").unwrap().to_string();
+    // let k8s_api_url = site_detail_value.get("k8s_api_url").unwrap().to_string();
 
-    let settings_hsm_group_name_opt = settings.get_string("hsm_group").ok();
+    // let settings_hsm_group_name_opt = settings.get_string("hsm_group").ok();
 
     let shasta_root_cert = get_csm_root_cert_content("alps");
 
@@ -417,9 +418,9 @@ async fn ws_console(
     ws: WebSocketUpgrade,
     user_agent: Option<TypedHeader<headers::UserAgent>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
+    _headers: HeaderMap,
 ) -> impl IntoResponse {
-    let cookie_header = headers.get("cookie").unwrap().to_str().unwrap();
+    // let cookie_header = headers.get("cookie").unwrap().to_str().unwrap();
 
     let user_agent = if let Some(TypedHeader(user_agent)) = user_agent {
         user_agent.to_string()
@@ -434,7 +435,7 @@ async fn ws_console(
 }
 
 /// Actual websocket statemachine (one will be spawned per connection)
-async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
+async fn handle_socket(socket: WebSocket, _who: SocketAddr, xname: String) {
     let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
@@ -466,7 +467,8 @@ async fn handle_socket(socket: WebSocket, who: SocketAddr, xname: String) {
         &vault_role_id,
         &k8s_api_url,
     )
-    .await;
+    .await
+    .expect("ERROR - Unable to attach to container");
 
     // Hook stream from k8s conman container to the websocket
     let stdout_stream = ReaderStream::new(attached.stdout().unwrap());
@@ -704,7 +706,8 @@ async fn get_hsm_details(
         &shasta_root_cert,
         hsm_groups_node_list,
     )
-    .await;
+    .await
+    .expect("ERROR - Unable to get node details");
 
     Ok(Json(serde_json::to_value(response).unwrap()))
 }
