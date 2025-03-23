@@ -1,4 +1,4 @@
-FROM rust:1.84.0 as builder
+FROM rust:1.85.1 as builder
 # Install cmake for building the `librdkafka` crate statically
 RUN apt-get update && apt-get install -y cmake
 WORKDIR /usr/src/cama
