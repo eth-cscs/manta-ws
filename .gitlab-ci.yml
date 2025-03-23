@@ -39,7 +39,7 @@ push_to_registry:
   stage: push
   image: docker:24.0.5  # Use the Docker image to run Docker commands
   script:
-    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin  # Login to Docker registry
+    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin jfrog.svc.cscs.ch # Login to Docker registry
     - docker push $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest  # Push the image to the registry
   only:
     - main  # Only run on main branch (you can adjust this)
