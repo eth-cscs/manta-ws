@@ -12,15 +12,15 @@ publish = false
 
 # PROD
 
-# backend-dispatcher = "0.1.42"
-# ochami-rs = "0.1.44"
-# mesa = "0.42.3-beta.75"
+backend-dispatcher = "0.1.42"
+ochami-rs = "0.1.44"
+mesa = "0.42.3-beta.75"
 
 # DEV
 
-backend-dispatcher = { path = "../backend-dispatcher" } # Only for development purposes
-ochami-rs = { path = "../ochami-rs" } # Only for development purposes
-mesa = { path = "../mesa" } # Only for development purposes
+# backend-dispatcher = { path = "../backend-dispatcher" } # Only for development purposes
+# ochami-rs = { path = "../ochami-rs" } # Only for development purposes
+# mesa = { path = "../mesa" } # Only for development purposes
 
 anyhow = { version = "1.0.44", default-features = false }
 directories = "4.0.1" # XDG Base Directory Specification
