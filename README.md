@@ -5,6 +5,12 @@
 ## Start API backend
 
 ```
+cargo run
+```
+
+If need to connect to backends using a socks5 proxy then:
+
+```
 SOCKS5="socks5h://127.0.0.1:1080" cargo run
 ```
 

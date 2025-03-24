@@ -1,29 +1,38 @@
 mod backend_api;
+mod backend_dispatcher;
+mod common;
 mod handlers;
 mod http_response;
 mod jwt_utils;
 mod log;
 
+use ::backend_dispatcher::{
+    contracts::BackendTrait,
+    interfaces::{cfs::CfsTrait, hsm::group::GroupTrait},
+    types::{K8sAuth, K8sDetails, cfs::CfsSessionGetResponse},
+};
 use axum::{
-    debug_handler,
+    Json, Router, TypedHeader, debug_handler,
     extract::{
+        ConnectInfo, Path, Query, WebSocketUpgrade,
         ws::{Message, WebSocket},
-        ConnectInfo, Path, Query,
-        WebSocketUpgrade, /* ws::{CloseFrame, Message, WebSocket},
-                          ConnectInfo, Path, Query, WebSocketUpgrade, */
     },
     headers,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post, put},
-    Json, Router, TypedHeader,
 };
+use common::config::types::MantaConfiguration;
 use config::Config;
 use directories::ProjectDirs;
+use futures::{AsyncBufReadExt, SinkExt, StreamExt, TryStreamExt};
 use hyper::HeaderMap;
-use mesa::{common::kubernetes, hsm::hw_inventory::hw_component::types::NodeSummary};
+use mesa::{
+    common::vault::http_client::fetch_shasta_k8s_secrets_from_vault,
+    hsm::hw_inventory::hw_component::types::NodeSummary,
+};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{fs::File, io::Read, net::SocketAddr, ops::ControlFlow, path::PathBuf, sync::Arc};
 use tokio::{io::AsyncWriteExt, sync::Semaphore};
 use tower_http::{
@@ -35,10 +44,13 @@ use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::Subs
 
 use crate::jwt_utils::get_claims_from_jwt_token;
 
-use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use tokio_util::io::ReaderStream;
 
+use anyhow::{Error, Result, bail};
+
 use crate::handlers::*;
+
+use backend_dispatcher::StaticBackendDispatcher;
 
 #[tokio::main]
 async fn main() {
@@ -68,7 +80,7 @@ async fn main() {
         .route("/bos/health", get(get_bos_health_check))
         .route("/authenticate", get(authenticate))
         .route("/console/:xname", get(ws_console))
-        .route("/cfssession", get(get_cfs_session))
+        .route("/cfssession/:cfssession", get(get_cfs_session))
         .route("/cfssession/:cfssession/logs", get(ws_cfs_session_logs))
         .route("/hsm", get(get_hsm))
         .route("/hsm/:hsm", get(get_hsm_details))
@@ -146,25 +158,180 @@ async fn create_user(
     (StatusCode::CREATED, Json(user))
 }
 
+async fn get_cfs_session(Path(cfs_session_name): Path<String>) -> Json<Value> {
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
+
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
+
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
+
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
+    };
+
+    let k8s_details = site
+        .k8s
+        .as_ref()
+        .expect("ERROR - k8s section not found in configuration");
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
+        // old configuration file. TODO: remove this when needed in the future and all users are
+        // using the right configuration file
+        .strip_suffix("/apis")
+        .unwrap_or(&shasta_base_url);
+
+    let shasta_api_url = match backend_tech.as_str() {
+        "csm" => shasta_barebone_url.to_owned() + "/apis",
+        "ochami" => shasta_barebone_url.to_owned(),
+        _ => {
+            eprintln!("Invalid backend technology");
+            std::process::exit(1);
+        }
+    };
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
+
+    let hsm_group_available_vec: Vec<String> = backend
+        .get_group_name_available(&shasta_token)
+        .await
+        .unwrap();
+
+    let cfs_session_vec = backend
+        .get_and_filter_sessions(
+            &shasta_token,
+            shasta_base_url,
+            &shasta_root_cert,
+            Some(hsm_group_available_vec),
+            None,
+            None,
+            None,
+            None,
+            Some(&cfs_session_name),
+            None,
+            None,
+        )
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!("Failed to get CFS sessions. Reason:\n{e}");
+            std::process::exit(1);
+        });
+
+    dbg!(&cfs_session_vec);
+
+    Json(serde_json::to_value(cfs_session_vec).unwrap())
+}
+
 async fn ws_cfs_session_logs(
     Path(cfs_session_name): Path<String>,
     ws: WebSocketUpgrade,
     user_agent: Option<TypedHeader<headers::UserAgent>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
+
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
+
+    let site_name: String = configuration.site.clone();
+    let site_detail_value_opt = configuration.sites.get(&site_name).cloned();
+
+    let site = site_detail_value_opt.unwrap();
+
+    let k8s_details = site
+        .k8s
+        .expect("ERROR - k8s section not found in configuration");
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
+        // old configuration file. TODO: remove this when needed in the future and all users are
+        // using the right configuration file
+        .strip_suffix("/apis")
+        .unwrap_or(&shasta_base_url);
+
+    let shasta_api_url = match backend_tech.as_str() {
+        "csm" => shasta_barebone_url.to_owned() + "/apis",
+        "ochami" => shasta_barebone_url.to_owned(),
+        _ => {
+            // FIXME: Do not exit like this
+            eprintln!("Invalid backend technology");
+            std::process::exit(1);
+        }
+    };
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
+
+    let shasta_k8s_secrets = match &k8s_details.authentication {
+        K8sAuth::Native {
+            certificate_authority_data,
+            client_certificate_data,
+            client_key_data,
+        } => {
+            serde_json::json!({ "certificate-authority-data": certificate_authority_data, "client-certificate-data": client_certificate_data, "client-key-data": client_key_data })
+        }
+        K8sAuth::Vault {
+            base_url: vault_base_url,
+        } => fetch_shasta_k8s_secrets_from_vault(&vault_base_url, &shasta_token, &site_name)
+            .await
+            .unwrap(),
+    };
+
     let user_agent = if let Some(TypedHeader(user_agent)) = user_agent {
         user_agent.to_string()
     } else {
         String::from("Unknown browser")
     };
+
     println!("`{user_agent}` at {addr} connected.");
     // finalize the upgrade process by returning upgrade callback.
     // we can customize the callback by sending additional info such as address.
-    ws.on_upgrade(move |socket| get_cfs_session_logs(socket, addr, cfs_session_name))
+    ws.on_upgrade(move |socket| {
+        get_cfs_session_logs(
+            socket,
+            addr,
+            backend,
+            shasta_token,
+            site_name,
+            cfs_session_name,
+            k8s_details,
+        )
+    })
 }
 
-async fn get_cfs_session_logs(mut socket: WebSocket, _who: SocketAddr, cfs_session_name: String) {
-    let settings = get_configuration();
+async fn get_cfs_session_logs(
+    mut socket: WebSocket,
+    _who: SocketAddr,
+    backend: StaticBackendDispatcher,
+    shasta_token: String,
+    site_name: String,
+    cfs_session_name: String,
+    k8s_details: K8sDetails,
+) {
+    /* let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
     let site_detail_value = site_detail_hashmap
@@ -268,6 +435,29 @@ async fn get_cfs_session_logs(mut socket: WebSocket, _who: SocketAddr, cfs_sessi
 
             container_status =
                 kubernetes::get_container_status(&cfs_session_pod, &ansible_container.name);
+        }
+    } */
+
+    dbg!(&shasta_token);
+    dbg!(&site_name);
+    dbg!(&cfs_session_name);
+    dbg!(&k8s_details);
+
+    let logs_stream = backend
+        .get_session_logs_stream(&shasta_token, &site_name, &cfs_session_name, &k8s_details)
+        .await
+        .unwrap();
+
+    let mut lines = logs_stream.lines();
+
+    while let Some(line) = lines.try_next().await.unwrap() {
+        if line.is_empty() {
+            // FIXME: This is a hack to make sure that the logs are displayed properly
+            // because for some reason websocat stops displaying logs if an empty line is
+            // sent
+            let _ = socket.send(Message::Text(" ".to_string())).await;
+        } else {
+            let _ = socket.send(Message::Text(line)).await;
         }
     }
 }
@@ -436,23 +626,68 @@ async fn ws_console(
 
 /// Actual websocket statemachine (one will be spawned per connection)
 async fn handle_socket(socket: WebSocket, _who: SocketAddr, xname: String) {
-    let settings = get_configuration();
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
 
-    let site_detail_hashmap = settings.get_table("sites").unwrap();
-    let site_detail_value = site_detail_hashmap
-        .get("alps")
-        .unwrap()
-        .clone()
-        .into_table()
-        .unwrap();
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
 
-    let vault_base_url = site_detail_value.get("vault_base_url").unwrap().to_string();
-    let vault_role_id = site_detail_value.get("vault_role_id").unwrap().to_string();
-    let vault_secret_path = site_detail_value
-        .get("vault_secret_path")
-        .unwrap()
-        .to_string();
-    let k8s_api_url = site_detail_value.get("k8s_api_url").unwrap().to_string();
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
+
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
+    };
+
+    let k8s_details = site
+        .k8s
+        .as_ref()
+        .expect("ERROR - k8s section not found in configuration");
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
+        // old configuration file. TODO: remove this when needed in the future and all users are
+        // using the right configuration file
+        .strip_suffix("/apis")
+        .unwrap_or(&shasta_base_url);
+
+    let shasta_api_url = match backend_tech.as_str() {
+        "csm" => shasta_barebone_url.to_owned() + "/apis",
+        "ochami" => shasta_barebone_url.to_owned(),
+        _ => {
+            eprintln!("Invalid backend technology");
+            std::process::exit(1);
+        }
+    };
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
+
+    let shasta_k8s_secrets = match &k8s_details.authentication {
+        K8sAuth::Native {
+            certificate_authority_data,
+            client_certificate_data,
+            client_key_data,
+        } => {
+            serde_json::json!({ "certificate-authority-data": certificate_authority_data, "client-certificate-data": client_certificate_data, "client-key-data": client_key_data })
+        }
+        K8sAuth::Vault {
+            base_url: vault_base_url,
+        } => fetch_shasta_k8s_secrets_from_vault(&vault_base_url, &shasta_token, &site_name)
+            .await
+            .unwrap(),
+    };
 
     // By splitting socket we can send and receive at the same time. In this example we will send
     // unsolicited messages to client based on some sort of server's internal event (i.e .timer).
@@ -462,10 +697,8 @@ async fn handle_socket(socket: WebSocket, _who: SocketAddr, xname: String) {
 
     let mut attached = mesa::node::console::get_container_attachment_to_conman(
         &xname.to_string(),
-        &vault_base_url,
-        &vault_secret_path,
-        &vault_role_id,
-        &k8s_api_url,
+        &k8s_details.api_url,
+        shasta_k8s_secrets,
     )
     .await
     .expect("ERROR - Unable to attach to container");
@@ -550,32 +783,48 @@ fn process_message(msg: Message, who: SocketAddr) -> ControlFlow<(), ()> {
     ControlFlow::Continue(())
 }
 
-async fn get_service_health(
-    headers: HeaderMap,
-    service: &str,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let settings = get_configuration();
+async fn get_service_health(headers: HeaderMap, service: &str) -> Result<Json<serde_json::Value>> {
+    // Configuration
+    let settings = common::config::get_configuration().await?;
 
-    let site_detail_hashmap = settings.get_table("sites").unwrap();
-    let site_detail_value = site_detail_hashmap
-        .get("alps")
-        .unwrap()
-        .clone()
-        .into_table()
-        .unwrap();
+    let configuration: MantaConfiguration = settings.try_deserialize()?;
 
-    let shasta_base_url = site_detail_value
-        .get("shasta_base_url")
-        .unwrap()
-        .to_string();
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
 
-    let shasta_root_cert = get_csm_root_cert_content("alps");
-
-    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
-        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
-    } else {
-        return Err(StatusCode::UNAUTHORIZED);
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => bail!("ERROR - Site '{}' not found in configuration", site_name),
     };
+
+    let k8s_details = site
+        .k8s
+        .as_ref()
+        .expect("ERROR - k8s section not found in configuration");
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
+        // old configuration file. TODO: remove this when needed in the future and all users are
+        // using the right configuration file
+        .strip_suffix("/apis")
+        .unwrap_or(&shasta_base_url);
+
+    let shasta_api_url = match backend_tech.as_str() {
+        "csm" => shasta_barebone_url.to_owned() + "/apis",
+        "ochami" => shasta_barebone_url.to_owned(),
+        _ => bail!("Invalid backend technology".to_string()),
+    };
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file)?;
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = backend.get_api_token(&site_name).await?;
 
     let response: Value = match service {
         // NOTE: sending always 500 error is a BAD practice, we
@@ -583,13 +832,12 @@ async fn get_service_health(
         // then create the right HTTP status code based on it
         "cfs" => {
             mesa::cfs::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .await?
         }
-        "bos" => mesa::bos::health_check::get(&shasta_token, &shasta_base_url, &shasta_root_cert)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
-        _ => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        "bos" => {
+            mesa::bos::health_check::get(&shasta_token, &shasta_base_url, &shasta_root_cert).await?
+        }
+        _ => bail!("Invalid service name"),
     };
 
     Ok(Json(response))
@@ -617,32 +865,57 @@ async fn get_bos_health_check(headers: HeaderMap) -> Result<Json<serde_json::Val
     Ok(response)
 }
 
-async fn get_hsm(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
-    let settings = get_configuration();
+async fn get_hsm(headers: HeaderMap) -> Json<serde_json::Value> {
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
 
-    let site_detail_hashmap = settings.get_table("sites").unwrap();
-    let site_detail_value = site_detail_hashmap
-        .get("alps")
-        .unwrap()
-        .clone()
-        .into_table()
-        .unwrap();
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
 
-    let shasta_base_url = site_detail_value
-        .get("shasta_base_url")
-        .unwrap()
-        .to_string();
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
 
-    let shasta_root_cert = get_csm_root_cert_content("alps");
-
-    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
-        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
-    } else {
-        return Err(StatusCode::UNAUTHORIZED);
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
     };
 
+    let k8s_details = site
+        .k8s
+        .as_ref()
+        .expect("ERROR - k8s section not found in configuration");
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
+        // old configuration file. TODO: remove this when needed in the future and all users are
+        // using the right configuration file
+        .strip_suffix("/apis")
+        .unwrap_or(&shasta_base_url);
+
+    let shasta_api_url = match backend_tech.as_str() {
+        "csm" => shasta_barebone_url.to_owned() + "/apis",
+        "ochami" => shasta_barebone_url.to_owned(),
+        _ => {
+            eprintln!("Invalid backend technology");
+            std::process::exit(1);
+        }
+    };
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
+
     let hsm_group_available_name_vec =
-        get_hsm_name_available_from_jwt_or_all(shasta_token, &shasta_base_url, &shasta_root_cert)
+        get_hsm_name_available_from_jwt_or_all(&shasta_token, &shasta_base_url, &shasta_root_cert)
             .await;
 
     let response_rslt =
@@ -651,21 +924,20 @@ async fn get_hsm(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCo
 
     // let response_data = axum::Json(serde_json::to_value(response.as_ref().unwrap()).unwrap());
 
-    if let Ok(mut response) = response_rslt {
-        response.retain(|hsm_group| hsm_group_available_name_vec.contains(&hsm_group.label));
-
-        return Ok(Json(serde_json::to_value(response).unwrap())); // FIX THIS: make cojin::shasta::hsm::http_client::get_hsm_groups to return Value instead of Vec<Value>
-    } else {
-        eprintln!("ERROR:\n{:#?}", response_rslt.unwrap());
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    match response_rslt {
+        Ok(mut response) => {
+            response.retain(|hsm_group| hsm_group_available_name_vec.contains(&hsm_group.label));
+            Json(serde_json::to_value(response).unwrap())
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
     }
 }
 
-async fn get_hsm_details(
-    Path(hsm): Path<String>,
-    headers: HeaderMap,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let settings = get_configuration();
+async fn get_hsm_details(Path(hsm): Path<String>, headers: HeaderMap) -> Json<serde_json::Value> {
+    /* let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
     let site_detail_value = site_detail_hashmap
@@ -686,13 +958,62 @@ async fn get_hsm_details(
         usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
     } else {
         return Err(StatusCode::UNAUTHORIZED);
+    }; */
+
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
+
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
+
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
+
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
     };
+
+    let k8s_details = site
+        .k8s
+        .as_ref()
+        .expect("ERROR - k8s section not found in configuration");
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
+        // old configuration file. TODO: remove this when needed in the future and all users are
+        // using the right configuration file
+        .strip_suffix("/apis")
+        .unwrap_or(&shasta_base_url);
+
+    let shasta_api_url = match backend_tech.as_str() {
+        "csm" => shasta_barebone_url.to_owned() + "/apis",
+        "ochami" => shasta_barebone_url.to_owned(),
+        _ => {
+            eprintln!("Invalid backend technology");
+            std::process::exit(1);
+        }
+    };
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
 
     let hsm_group = mesa::hsm::group::http_client::get(
         &shasta_token,
-        &shasta_base_url,
+        &shasta_api_url,
         &shasta_root_cert,
-        Some(&hsm),
+        Some(&[&hsm]),
+        None,
     )
     .await
     .unwrap();
@@ -709,14 +1030,11 @@ async fn get_hsm_details(
     .await
     .expect("ERROR - Unable to get node details");
 
-    Ok(Json(serde_json::to_value(response).unwrap()))
+    Json(serde_json::to_value(response).unwrap())
 }
 
-async fn get_hsm_hardware(
-    Path(hsm): Path<String>,
-    headers: HeaderMap,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let settings = get_configuration();
+async fn get_hsm_hardware(Path(hsm): Path<String>, headers: HeaderMap) -> Json<serde_json::Value> {
+    /* let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
     let site_detail_value = site_detail_hashmap
@@ -737,13 +1055,62 @@ async fn get_hsm_hardware(
         usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
     } else {
         return Err(StatusCode::UNAUTHORIZED);
+    }; */
+
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
+
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
+
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
+
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
     };
+
+    let k8s_details = site
+        .k8s
+        .as_ref()
+        .expect("ERROR - k8s section not found in configuration");
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
+        // old configuration file. TODO: remove this when needed in the future and all users are
+        // using the right configuration file
+        .strip_suffix("/apis")
+        .unwrap_or(&shasta_base_url);
+
+    let shasta_api_url = match backend_tech.as_str() {
+        "csm" => shasta_barebone_url.to_owned() + "/apis",
+        "ochami" => shasta_barebone_url.to_owned(),
+        _ => {
+            eprintln!("Invalid backend technology");
+            std::process::exit(1);
+        }
+    };
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
 
     let hsm_group = mesa::hsm::group::http_client::get(
         &shasta_token,
         &shasta_base_url,
         &shasta_root_cert,
-        Some(&hsm),
+        Some(&[&hsm]),
+        None,
     )
     .await
     .unwrap();
@@ -756,7 +1123,7 @@ async fn get_hsm_hardware(
     let mut tasks = tokio::task::JoinSet::new();
 
     let sem = Arc::new(Semaphore::new(5)); // CSM 1.3.1 higher number of concurrent tasks won't
-                                           // make it faster
+    // make it faster
 
     // Get HW inventory details for target HSM group
     for hsm_member in hsm_group_target_members.clone() {
@@ -764,13 +1131,14 @@ async fn get_hsm_hardware(
         let shasta_base_url_string = shasta_base_url.to_string(); // TODO: make it static
         let shasta_root_cert_vec = shasta_root_cert.to_vec();
         let hsm_member_string = hsm_member.to_string(); // TODO: make it static
-                                                        //
+        //
         let permit = Arc::clone(&sem).acquire_owned().await;
 
         tracing::info!("Getting HW inventory details for node '{}'", hsm_member);
+
         tasks.spawn(async move {
             let _permit = permit; // Wait semaphore to allow new tasks https://github.com/tokio-rs/tokio/discussions/2648#discussioncomment-34885
-            mesa::hsm::hw_inventory::hw_component::http_client::get_hw_inventory(
+            mesa::hsm::hw_inventory::hw_component::http_client::get(
                 &shasta_token_string,
                 &shasta_base_url_string,
                 &shasta_root_cert_vec,
@@ -782,9 +1150,7 @@ async fn get_hsm_hardware(
     }
 
     while let Some(message) = tasks.join_next().await {
-        if let Ok(mut node_hw_inventory) = message {
-            node_hw_inventory = node_hw_inventory.pointer("/Nodes/0").unwrap().clone();
-            let node_summary = NodeSummary::from_csm_value(node_hw_inventory.clone());
+        if let Ok(node_summary) = message {
             hsm_summary.push(node_summary);
         } else {
             tracing::error!("Failed procesing/fetching node hw information");
@@ -793,11 +1159,7 @@ async fn get_hsm_hardware(
 
     println!("DEBUG - result:\n{:?}", hsm_summary);
 
-    Ok(Json(serde_json::to_value(hsm_summary).unwrap()))
-}
-
-async fn get_cfs_session() -> Json<serde_json::Value> {
-    Json(json!({}))
+    Json(serde_json::to_value(hsm_summary).unwrap())
 }
 
 async fn power_off_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
@@ -980,7 +1342,8 @@ async fn node_migration(
         shasta_token,
         &shasta_base_url,
         &shasta_root_cert,
-        Some(&target.to_string()),
+        Some(&[&target]),
+        None,
     )
     .await
     .is_ok()
@@ -988,7 +1351,10 @@ async fn node_migration(
         tracing::debug!("The HSM group {} exists, good.", target);
     } else {
         if create_hsm_group {
-            tracing::info!("HSM group {} does not exist, but the option to create the group has been selected, creating it now.", target.to_string());
+            tracing::info!(
+                "HSM group {} does not exist, but the option to create the group has been selected, creating it now.",
+                target.to_string()
+            );
             mesa::hsm::group::http_client::create_new_group(
                 shasta_token,
                 &shasta_base_url,
@@ -1002,7 +1368,10 @@ async fn node_migration(
             .await
             .expect("Unable to create new HSM group");
         } else {
-            tracing::error!("HSM group {} does not exist, but the option to create the group was NOT specificied, cannot continue.", target.to_string());
+            tracing::error!(
+                "HSM group {} does not exist, but the option to create the group was NOT specificied, cannot continue.",
+                target.to_string()
+            );
             return Err(StatusCode::UNPROCESSABLE_ENTITY);
         }
     }
