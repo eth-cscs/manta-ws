@@ -3,12 +3,13 @@ name: Build and Push Docker Image to GHCR
 on:
   push:
     branches:
-      - '*'
+      - main
+      - dev
     tags:
       - '*'  # Trigger on any tag push (e.g., v1.0.0)
   pull_request:
     branches:
-      - '*'
+      - main
 
 permissions:
   contents: read
@@ -36,10 +37,10 @@ jobs:
           # Determine the tag based on the event
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
             IMAGE_TAG="${{ github.ref_name }}"
-          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_name }}" == "refs/heads/main" ]]; then
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_name }}" == "main" ]]; then
             IMAGE_TAG="latest"
           else
-            IMAGE_TAG="${{ github.ref_name#refs/heads/ }}"
+            IMAGE_TAG="${{ github.ref_name }}"
           fi
           # Build the image with the determined tag
           podman build -t ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG} .
