@@ -4,12 +4,17 @@ on:
   push:
     branches:
       - '*'
-      - '*'
     tags:
       - '*'  # Trigger on any tag push (e.g., v1.0.0)
   pull_request:
     branches:
       - '*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to checkout and run pipeline for'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -25,6 +30,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Use the input tag for workflow_dispatch, otherwise use the default ref
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
       - name: Check Podman version
         run: podman version
@@ -35,7 +43,9 @@ jobs:
       - name: Build and push Docker image
         run: |
           # Determine the tag based on the event
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            IMAGE_TAG="${{ github.event.inputs.tag }}"
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
             IMAGE_TAG="${{ github.ref_name }}"
           elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_name }}" == "main" ]]; then
             IMAGE_TAG="latest"
