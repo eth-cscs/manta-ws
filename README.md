@@ -2,6 +2,17 @@
 
 #;TLDR
 
+## Pipeline
+
+The pipeline will trigger for all branches and for tag pushes.
+If you want to push some changes to a development branch without triggering a potentially long-running build you can use:
+
+```
+git push -o ci.skip
+```
+
+You can also manually trigger a build for a specific branch or tag. Navigate to Actions > Build and Push Docker Image to GHCR > Run workflow > Select appropriate ref
+
 ## Start API backend
 
 ```
