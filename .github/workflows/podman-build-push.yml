@@ -54,10 +54,10 @@ jobs:
           # Push the image to GHCR
           podman push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG}
 
-      # Upload Dockerfile as an artifact (optional)
-      - name: Upload Dockerfile artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dockerfile
-          path: Dockerfile
-          retention-days: 1
+          #      # Upload Dockerfile as an artifact (optional)
+          #      - name: Upload Dockerfile artifact
+          #        uses: actions/upload-artifact@v4
+          #        with:
+          #          name: dockerfile
+          #          path: Dockerfile
+          #          retention-days: 1
