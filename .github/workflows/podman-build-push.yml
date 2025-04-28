@@ -1,0 +1,58 @@
+name: Build and Push Docker Image to GHCR
+
+on:
+  push:
+    branches:
+      - '*'
+    tags:
+      - '*'  # Trigger on any tag push (e.g., v1.0.0)
+  pull_request:
+    branches:
+      - '*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to checkout and run pipeline for'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write  # Required to push to GitHub Container Registry
+
+env:
+  DOCKER_IMAGE_NAME: cama  # Image name matching the repository name
+  DOCKER_REGISTRY: ghcr.io  # GitHub Container Registry
+
+jobs:
+  dockerize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Use the input tag for workflow_dispatch, otherwise use the default ref
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Check Podman version
+        run: podman version
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Build and push Docker image
+        run: |
+          # Determine the tag based on the event
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            IMAGE_TAG="${{ github.event.inputs.tag }}"
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+            IMAGE_TAG="${{ github.ref_name }}"
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_name }}" == "main" ]]; then
+            IMAGE_TAG="latest"
+          else
+            IMAGE_TAG="${{ github.ref_name }}"
+          fi
+          # Build the image with the determined tag
+          podman build -t ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG} .
+          # Push the image to GHCR
+          podman push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG}
