@@ -1,0 +1,63 @@
+name: Build and Push Docker Image to GHCR
+
+# Trigger the workflow on push to main branch or tags, and on pull requests to main
+on:
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - '*'  # Trigger on any tag push (e.g., v1.0.0)
+  pull_request:
+    branches:
+      - main
+
+# Permissions for the workflow
+permissions:
+  contents: read
+  packages: write  # Required to push to GitHub Container Registry
+
+# Environment variables available to all jobs
+env:
+  DOCKER_IMAGE_NAME: cama  # Image name matching the repository name
+  DOCKER_REGISTRY: ghcr.io  # GitHub Container Registry
+
+jobs:
+  dockerize:
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/podman/stable
+    steps:
+      # Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Verify Podman version
+      - name: Check Podman version
+        run: podman version
+
+      # Log in to GitHub Container Registry
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      # Build and push the Docker image
+      - name: Build and push Docker image
+        run: |
+          # Determine the tag based on the event
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+            IMAGE_TAG="${{ github.ref_name }}"
+          else
+            IMAGE_TAG="latest"
+          fi
+          # Build the image with the determined tag
+          podman build -t ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG} .
+          # Push the image to GHCR
+          podman push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG}
+
+      # Upload Dockerfile as an artifact (optional)
+      - name: Upload Dockerfile artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dockerfile
+          path: Dockerfile
+          retention-days: 1
