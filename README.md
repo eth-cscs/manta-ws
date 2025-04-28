@@ -1,4 +1,4 @@
-# CAMA
+# MANTA-WS
 
 #;TLDR
 
@@ -110,7 +110,7 @@ Ok to proceed? (y)
 
 Vue.js - The Progressive JavaScript Framework
 
-✔ Project name: … cama
+✔ Project name: … 
 ✔ Add TypeScript? … No / Yes
 ✔ Add JSX Support? … No / Yes
 ✔ Add Vue Router for Single Page Application development? … No / Yes
@@ -120,20 +120,20 @@ Vue.js - The Progressive JavaScript Framework
 ✔ Add ESLint for code quality? … No / Yes
 ✔ Add Prettier for code formatting? … No / Yes
 
-Scaffolding project in /home/msopena/polybox/Documents/tests/rust/cama/assets/cama...
+Scaffolding project in /home/msopena/polybox/Documents/tests/rust//assets/manta-ws...
 
 Done. Now run:
 
-  cd cama
+  cd 
   npm install
   npm run format
   npm run dev
 
 
-cama/assets on  master [!?] via  v18.16.0 took 59s
-❯ cd cama
+/assets on  master [!?] via  v18.16.0 took 59s
+❯ cd 
 
-cama/assets/cama on  master [!?] via  v18.16.0
+/assets/manta-ws on  master [!?] via  v18.16.0
 ❯ npm install
 npm WARN deprecated sourcemap-codec@1.4.8: Please use @jridgewell/sourcemap-codec instead
 
@@ -144,18 +144,18 @@ added 146 packages, and audited 147 packages in 18s
 
 found 0 vulnerabilities
 
-cama/assets/cama on  master [!?] via  v18.16.0 took 18s
+/assets/manta-ws on  master [!?] via  v18.16.0 took 18s
 ❯ ls
 index.html  node_modules  package.json  package-lock.json  public  README.md  src  vite.config.js
 
-cama/assets/cama on  master [!?] via  v18.16.0
+/assets/manta-ws on  master [!?] via  v18.16.0
 ❯ ls src/
 App.vue  assets  components  main.js  router  stores  views
 
-cama/assets/cama on  master [!?] via  v18.16.0
+/assets/manta-ws on  master [!?] via  v18.16.0
 ❯ npm run format
 
-> cama@0.0.0 format
+> @0.0.0 format
 > prettier --write src/
 
 src/App.vue 105ms
@@ -175,10 +175,10 @@ src/stores/counter.js 8ms
 src/views/AboutView.vue 5ms
 src/views/HomeView.vue 4ms
 
-cama/assets/cama on  master [!?] via  v18.16.0
+/assets/manta-ws on  master [!?] via  v18.16.0
 ❯ npm run dev
 
-> cama@0.0.0 dev
+> @0.0.0 dev
 > vite
 
 

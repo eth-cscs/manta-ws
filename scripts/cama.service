@@ -1,10 +1,10 @@
 [Unit]
-Description=cama systemd service unit file.
+Description=manta-ws systemd service unit file.
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/cama
+ExecStart=/usr/local/bin/manta-ws
 ExecReload=/bin/kill -HUP $MAINPID
 ExecStop=/bin/kill -SIGTERM $MAINPID
 WorkingDirectory=/usr/local/bin
