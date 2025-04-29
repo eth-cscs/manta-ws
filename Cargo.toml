@@ -25,7 +25,8 @@ mesa = "=0.42.3-beta.75"
 anyhow = { version = "1.0.98", default-features = false }
 directories = "6.0.0" # XDG Base Directory Specification
 config = { version = "0.15.11", features = ["toml"] } # used to read manta configuration file
-axum = { version = "0.6.15", features = ["headers", "ws", "macros"] } # TODO: update breaks things, feature flags changed
+axum = { version = "0.8.3", features = ["ws", "macros"] }
+axum-extra = { version = "0.10.1", features = ["typed-header"] }
 jsonwebtoken = "9.3.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
@@ -33,12 +34,12 @@ serde_yaml = "0.9.17" # TODO: deprecated, need to replace
 tokio-util = "0.7.5"
 tokio = { version = "1.44.2", features = ["rt-multi-thread"] }
 bytes = "1.10.1"
-hyper = { version = "1.6.0" } # TODO: breaking change
+hyper = { version = "1.6.0" }
 tower = "0.5.2"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 base64 = "0.22.1"
-tower-http = { version = "0.4.0", features = ["fs", "trace", "cors"] } # TODO: breaking change
+tower-http = { version = "0.6.2", features = ["fs", "trace", "cors"] }
 futures = { version = "0.3.31", default-features = false }
 futures-util = { version = "0.3.31", default-features = false, features = ["sink", "std"] }
 chrono = "0.4.41"
