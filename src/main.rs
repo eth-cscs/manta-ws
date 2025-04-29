@@ -18,7 +18,7 @@ use axum::{
         ws::{Message, WebSocket},
     },
     headers,
-    http::StatusCode,
+    http::{ StatusCode, HeaderMap},
     response::IntoResponse,
     routing::{get, post, put},
 };
@@ -26,7 +26,7 @@ use common::config::types::MantaConfiguration;
 use config::Config;
 use directories::ProjectDirs;
 use futures::{AsyncBufReadExt, SinkExt, StreamExt, TryStreamExt};
-use hyper::HeaderMap;
+//use hyper::HeaderMap;
 use mesa::{
     common::vault::http_client::fetch_shasta_k8s_secrets_from_vault,
     hsm::hw_inventory::hw_component::types::NodeSummary,
