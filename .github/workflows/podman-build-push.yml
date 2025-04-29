@@ -59,3 +59,4 @@ jobs:
           podman build -t ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG} .
           # Push the image to GHCR
           podman push ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG}
+
