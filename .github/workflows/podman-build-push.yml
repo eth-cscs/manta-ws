@@ -25,6 +25,7 @@ env:
   DOCKER_REGISTRY: ghcr.io  # GitHub Container Registry
 
 jobs:
+  tests: 
   dockerize:
     runs-on: ubuntu-latest
     steps:
@@ -33,6 +34,9 @@ jobs:
         with:
           # Use the input tag for workflow_dispatch, otherwise use the default ref
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: run tests
+        run: cargo test
 
       - name: Check Podman version
         run: podman version

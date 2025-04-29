@@ -26,7 +26,7 @@ use common::config::types::MantaConfiguration;
 use config::Config;
 use directories::ProjectDirs;
 use futures::{AsyncBufReadExt, SinkExt, StreamExt, TryStreamExt};
-use hyper::HeaderMap;
+use hyper::{ HeaderMap, header::{self, HeaderName, HeaderValue} };
 use mesa::{
     common::vault::http_client::fetch_shasta_k8s_secrets_from_vault,
     hsm::hw_inventory::hw_component::types::NodeSummary,
@@ -474,7 +474,7 @@ pub fn get_configuration_file_path() -> PathBuf {
 }
 
 /// Reads configuration parameters related to manta from environment variables or file. If both
-/// defiend, then environment variables takes preference
+/// defined, then environment variables takes preference
 pub fn get_configuration() -> Config {
     let mut config_path = get_configuration_file_path();
     config_path.push("config.toml"); // ~/.config/manta/config is the file
@@ -1388,4 +1388,137 @@ async fn node_migration(
     .await;
 
     Ok(())
+}
+
+// testing handlers
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_version_handler() {
+        let result = get_version().await;
+        assert_eq!(result, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[tokio::test]
+    async fn test_root_handler() {
+        let result = root().await;
+        assert_eq!(result, "Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_test_whoami_handler() {
+        let jwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJuYW1lIjoiQWxpY2UifQ.X84U8wU3mH7I83hC3w0oTPm0qR86yq3m2p0fZQ6n3oA";
+        let auth_header = format!("Bearer {}", jwt);
+
+        let headers = HeaderMap::from_iter([(
+            header::AUTHORIZATION,
+            HeaderValue::from_str(&auth_header).unwrap(),
+        )]);
+
+        let result = test_whoami(headers).await;
+        assert_eq!(result, "Hello Alice!!!");
+    }
+
+    #[tokio::test]
+    async fn test_test_ping_handler() {
+        let result = test_ping().await;
+        assert_eq!(result, "Pong!");
+    }
+    // test create_user
+    // TODO: integration test (has side effects)
+    //#[tokio::test]
+    //async fn test_create_user_handler() {
+    //    let result = create_user().await;
+    //    assert_eq!(result, "!");
+    //}
+
+    // test get_cfs_session
+    // TODO: integration test (has side effects)
+    //#[tokio::test]
+    //async fn test_get_cfs_session_handler() {
+    //    let result = get_cfs_session().await;
+    //    assert_eq!(result, "");
+    //}
+
+    // test ws_cfs_session_logs
+    // TODO: integration test (has side effects)
+    // complex function that talks to:
+    //  - kubernetes
+    //  - vault
+    //  - does websocket upgrades
+    //#[tokio::test]
+    //async fn test_get_cfs_session_handler() {
+    //    let result = get_cfs_session().await;
+    //    assert_eq!(result, "");
+    //}
+    //
+
+    // test get_configuration_file_path
+    #[test]
+    fn test_get_configuration_file_path() {
+        // just check that the function won't panic
+        let _ = get_configuration_file_path();
+    }
+
+    // test get_configuration
+    // this test will fail if your machine is not configured properly
+    // TODO: this test should be agnostic of your machine
+    #[test]
+    fn test_get_configuration() {
+        // just check that the function won't panic
+        let _ = get_configuration();
+    }
+
+    // test get_csm_root_cert_content
+    // this test will fail if your machine is not configured properly
+    // TODO: this test should be agnostic of your machine
+    #[test]
+    fn test_get_csm_root_cert_content() {
+        // just check that the function won't panic
+        let _ = get_csm_root_cert_content("alps");
+    }
+
+    // test authenticate
+    // TODO: integration test, talks to auth backend
+    
+    // test ws_console
+    // TODO: integration test, upgrades connection to websocket
+
+    // test handle_socket
+    // TODO: integration test, websocket statemachine
+    
+    // test process_message
+    // TODO: integration test, print messages from websocket to stdout
+    
+    // test get_service_health
+    // TODO: integration test, calls mesa (csm-rs) with status of service
+
+    // test get_cfs_health_check
+    // TODO: integration test, wrapper for get_service_health
+
+    // test get_bos_health_check
+    // TODO: integration test, wrapper for get_service_health
+    
+    // test get_hsm
+    // TODO: integration test, talks to hsm service
+
+    // test get_hsm_details
+    // TODO: integration test, talks to hsm service
+
+    // test get_hsm_hardware
+    // TODO: integration test, talks to hsm service
+
+    // test power_off_node
+    // TODO: integration test, talks to power management service
+
+    // test power_on_node
+    // TODO: integration test, talks to power management service
+
+    // test power_reset_node
+    // TODO: integration test, talks to power management service
+
+    // test node_migration
+    // TODO: integration test, talks to ?
 }
