@@ -25,7 +25,6 @@ env:
   DOCKER_REGISTRY: ghcr.io  # GitHub Container Registry
 
 jobs:
-  tests: 
   dockerize:
     runs-on: ubuntu-latest
     steps:
