@@ -3,7 +3,7 @@ FROM rust:1.85.1 as builder
 RUN apt-get update && apt-get install -y cmake
 WORKDIR /usr/src/manta-ws
 COPY . .
-RUN cargo install --path .
+RUN cargo install --jobs $(nproc) --path .
 
 FROM debian:bookworm-slim
 COPY --from=builder /usr/local/cargo/bin/manta-ws /usr/local/bin/manta-ws
