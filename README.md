@@ -217,3 +217,5 @@ npm i --save @fortawesome/fontawesome-svg-core
 npm install @mdi/svg @mdi/util
 npm install @mdi/js -D
 ```
+
+
