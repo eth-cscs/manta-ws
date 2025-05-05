@@ -708,6 +708,7 @@ async fn handle_socket(socket: WebSocket, _who: SocketAddr, xname: String) {
 
     let mut stdin_writer = attached.stdin().unwrap();
 
+    // This task will receive messages from the conman container and send them to the client
     let _send_task = tokio::spawn(async move {
         let _ = sender
             .send(Message::Text(format!("Connected to {}\n\r", xname)))
