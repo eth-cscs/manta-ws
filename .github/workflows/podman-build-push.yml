@@ -50,6 +50,10 @@ jobs:
       - name: Run tests
         run: cargo test
 
+      - name: Test build
+        if: github.event_name == 'pull_request'  # Test build to check if everything is find during pull requests
+        run: cargo install --path .
+
   dockerize:
     runs-on: ubuntu-latest
     needs: test  # Depends on successful completion of the test job
