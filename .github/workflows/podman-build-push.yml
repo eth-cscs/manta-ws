@@ -3,12 +3,12 @@ name: Build and Push Docker Image to GHCR
 on:
   push:
     branches:
-      - '*'
+      - '**'
     tags:
-      - '*'  # Trigger on any tag push (e.g., v1.0.0)
+      - '**'  # Trigger on any tag push (e.g., v1.0.0)
   pull_request:
     branches:
-      - '*'
+      - '**'
   workflow_dispatch:
     inputs:
       tag:
