@@ -31,7 +31,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # Use the input tag for workflow_dispatch, otherwise use the default ref
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
       - name: Setup Rust
@@ -58,7 +57,8 @@ jobs:
           elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_name }}" == "main" ]]; then
             IMAGE_TAG="latest"
           else
-            IMAGE_TAG="${{ github.ref_name }}"
+            # Sanitize branch name by replacing '/' with '-'
+            IMAGE_TAG=$(echo "${{ github.ref_name }}" | tr '/' '-')
           fi
           # Build the image with the determined tag
           podman build -t ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG} .
