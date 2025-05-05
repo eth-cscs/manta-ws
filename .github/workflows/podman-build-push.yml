@@ -34,13 +34,21 @@ jobs:
           # Use the input tag for workflow_dispatch, otherwise use the default ref
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run tests
+        run: cargo test
+
       - name: Check Podman version
         run: podman version
 
       - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
 
       - name: Build and push Docker image
+        if: github.event_name != 'pull_request'
         run: |
           # Determine the tag based on the event
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
