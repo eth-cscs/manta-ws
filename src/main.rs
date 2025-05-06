@@ -8,7 +8,7 @@ mod manta_backend_dispatcher;
 
 use ::manta_backend_dispatcher::{
     contracts::BackendTrait,
-    interfaces::{cfs::CfsTrait, hsm::group::GroupTrait},
+    interfaces::{cfs::CfsTrait, hsm::group::GroupTrait, pcs::PCSTrait},
     types::{K8sAuth, K8sDetails},
 };
 use axum::{
@@ -27,7 +27,6 @@ use common::config::types::MantaConfiguration;
 use config::Config;
 use directories::ProjectDirs;
 use futures::{AsyncBufReadExt, SinkExt, StreamExt, TryStreamExt};
-//use hyper::HeaderMap;
 use mesa::{
     common::vault::http_client::fetch_shasta_k8s_secrets_from_vault,
     hsm::hw_inventory::hw_component::types::NodeSummary,
@@ -963,7 +962,6 @@ async fn get_all_groups(headers: HeaderMap) -> Json<serde_json::Value> {
 
     // Get auth token
     let shasta_token = headers.get("authorization").unwrap().to_str().unwrap();
-    // let shasta_token = backend.get_api_token(&site_name).await.unwrap();
 
     let hsm_group_available_name_vec = backend
         .get_group_available(shasta_token)
@@ -1144,38 +1142,36 @@ async fn get_hsm_hardware(
 async fn power_off_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
     tracing::info!("Power OFF node {}", node);
 
-    let settings = get_configuration();
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
 
-    let site_detail_hashmap = settings.get_table("sites").unwrap();
-    let site_detail_value = site_detail_hashmap
-        .get("alps")
-        .unwrap()
-        .clone()
-        .into_table()
-        .unwrap();
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
 
-    let shasta_base_url = site_detail_value
-        .get("shasta_base_url")
-        .unwrap()
-        .to_string();
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
 
-    let shasta_root_cert = get_csm_root_cert_content("alps");
-
-    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
-        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
-    } else {
-        return Err(StatusCode::UNAUTHORIZED);
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
     };
 
-    let response_rslt = mesa::capmc::http_client::node_power_off::post_sync(
-        shasta_token,
-        &shasta_base_url,
-        &shasta_root_cert,
-        vec![node.clone()],
-        Some("Web shutdown".to_string()),
-        true,
-    )
-    .await;
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = headers.get("authorization").unwrap().to_str().unwrap();
+
+    let response_rslt = backend.power_off_sync(shasta_token, &[node], true).await;
 
     match response_rslt {
         Ok(_) => Ok(()),
@@ -1187,37 +1183,36 @@ async fn power_off_node(Path(node): Path<String>, headers: HeaderMap) -> Result<
 async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
     tracing::info!("Power ON node {}", node);
 
-    let settings = get_configuration();
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
 
-    let site_detail_hashmap = settings.get_table("sites").unwrap();
-    let site_detail_value = site_detail_hashmap
-        .get("alps")
-        .unwrap()
-        .clone()
-        .into_table()
-        .unwrap();
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
 
-    let shasta_base_url = site_detail_value
-        .get("shasta_base_url")
-        .unwrap()
-        .to_string();
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
 
-    let shasta_root_cert = get_csm_root_cert_content("alps");
-
-    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
-        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
-    } else {
-        return Err(StatusCode::UNAUTHORIZED);
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
     };
 
-    let response_rslt = mesa::capmc::http_client::node_power_on::post_sync(
-        shasta_token,
-        &shasta_base_url,
-        &shasta_root_cert,
-        vec![node.clone()],
-        Some("Web shutdown".to_string()),
-    )
-    .await;
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = headers.get("authorization").unwrap().to_str().unwrap();
+
+    let response_rslt = backend.power_on_sync(shasta_token, &[node]).await;
 
     match response_rslt {
         Ok(_) => Ok(()),
@@ -1228,38 +1223,36 @@ async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(
 async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
     tracing::debug!("Power RESET node {}", node);
 
-    let settings = get_configuration();
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
 
-    let site_detail_hashmap = settings.get_table("sites").unwrap();
-    let site_detail_value = site_detail_hashmap
-        .get("alps")
-        .unwrap()
-        .clone()
-        .into_table()
-        .unwrap();
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
 
-    let shasta_base_url = site_detail_value
-        .get("shasta_base_url")
-        .unwrap()
-        .to_string();
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
 
-    let shasta_root_cert = get_csm_root_cert_content("alps");
-
-    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
-        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
-    } else {
-        return Err(StatusCode::UNAUTHORIZED);
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
     };
 
-    let response_rslt = mesa::capmc::http_client::node_power_off::post_sync(
-        shasta_token,
-        &shasta_base_url,
-        &shasta_root_cert,
-        vec![node.clone()],
-        Some("Web shutdown".to_string()),
-        true,
-    )
-    .await;
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let shasta_token = headers.get("authorization").unwrap().to_str().unwrap();
+
+    let response_rslt = backend.power_on_sync(shasta_token, &[node]).await;
 
     match response_rslt {
         Ok(_) => Ok(()),
