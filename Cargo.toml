@@ -43,3 +43,5 @@ futures = { version = "0.3.28", default-features = false }
 futures-util = { version = "0.3.28", default-features = false, features = ["sink", "std"] }
 chrono = "0.4.38"
 rdkafka = { version = "0.37", features = ["cmake-build"] }
+utoipa = { version = "5.3.1" }
+

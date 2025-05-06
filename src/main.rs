@@ -52,6 +52,28 @@ use crate::handlers::*;
 
 use backend_dispatcher::StaticBackendDispatcher;
 
+use utoipa::{path, OpenApi, openapi::OpenApi as OpenApiDoc, ToSchema};
+//use utoipa::OpenApi;
+//use openapi_doc::ApiDoc;
+
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "Manta API",
+        description = "API for managing Manta services",
+        version = "0.1.2"
+    ),
+    paths(
+        root,
+        test_ping,
+        test_whoami,
+        get_openapi,
+        get_version,
+        create_user,
+    )
+)]
+pub struct ApiDoc;
+
 #[tokio::main]
 async fn main() {
     // initialize tracing
@@ -68,12 +90,13 @@ async fn main() {
     // build our application with a route
     let app = Router::new()
         .fallback_service(ServeDir::new(assets_dir).append_index_html_on_directories(true))
-        .route("/test/whoami", get(test_whoami))
-        .route("/test/ping", get(test_ping))
         // `GET /` goes to `root`
         .route("/", get(root))
-        // `POST /users` goes to `create_user`
+        .route("/test/whoami", get(test_whoami))
+        .route("/test/ping", get(test_ping))
+        .route("/openapi", get(get_openapi))
         .route("/version", get(get_version))
+        // `POST /users` goes to `create_user`
         .route("/users", post(create_user))
         .route("/kernel-parameters", get(get_kernel_parameters))
         .route("/cfs/health", get(get_cfs_health_check))
@@ -109,27 +132,49 @@ async fn main() {
 }
 
 // the input to our `create_user` handler
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct CreateUser {
     username: String,
 }
 
 // the output to our `create_user` handler
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct User {
     id: u64,
     username: String,
 }
 
-async fn get_version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
-}
-
+#[utoipa::path(
+    get,
+    path = "/",
+    responses(
+        (status = 200, description = "Hello world message", body = String)
+    )
+)]
 async fn root() -> &'static str {
     println!("Hello, World!");
     "Hello, World!"
 }
 
+#[utoipa::path(
+    get,
+    path = "/version",
+    responses(
+        (status = 200, description = "Get manta-ws version", body = String)
+    )
+)]
+async fn get_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+
+#[utoipa::path(
+    get,
+    path = "/test/whoami",
+    responses(
+        (status = 200, description = "Test current user", body = String)
+    )
+)]
 async fn test_whoami(headers: HeaderMap) -> String {
     let token = headers.get("authorization").unwrap().to_str().unwrap();
 
@@ -138,10 +183,38 @@ async fn test_whoami(headers: HeaderMap) -> String {
     format!("Hello {}!!!", claims_json["name"].as_str().unwrap())
 }
 
+#[utoipa::path(
+    get,
+    path = "/openapi",
+    responses(
+        (status = 200, description = "Get openapi json", body = String)
+    )
+)]
+async fn get_openapi() -> impl IntoResponse {
+    let openapi: OpenApiDoc = ApiDoc::openapi();
+    Json(openapi)
+}
+
+#[utoipa::path(
+    get,
+    path = "/test/ping",
+    responses(
+        (status = 200, description = "Ping health endpoint", body = String)
+    )
+)]
 async fn test_ping() -> &'static str {
     "Pong!"
 }
 
+#[utoipa::path(
+    post,
+    path = "/users",
+    request_body = CreateUser,
+    responses(
+        (status = 201, description = "User created", body = User),
+        (status = 400, description = "Invalid user data")
+    )
+)]
 async fn create_user(
     // this argument tells axum to parse the request body
     // as JSON into a `CreateUser` type
