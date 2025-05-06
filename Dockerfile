@@ -7,4 +7,4 @@ RUN cargo install --jobs $(nproc) --path .
 
 FROM debian:bookworm-slim
 COPY --from=builder /usr/local/cargo/bin/manta-ws /usr/local/bin/manta-ws
-CMD ["manta-ws"]
+CMD ["/usr/local/bin/manta-ws"]
