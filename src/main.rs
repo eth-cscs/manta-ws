@@ -9,7 +9,7 @@ mod manta_backend_dispatcher;
 use ::manta_backend_dispatcher::{
     contracts::BackendTrait,
     interfaces::{cfs::CfsTrait, hsm::group::GroupTrait},
-    types::{K8sAuth, K8sDetails, cfs::session::CfsSessionGetResponse},
+    types::{K8sAuth, K8sDetails},
 };
 use axum::{
     Json, Router, debug_handler,
@@ -33,7 +33,7 @@ use mesa::{
     hsm::hw_inventory::hw_component::types::NodeSummary,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::{fs::File, io::Read, net::SocketAddr, ops::ControlFlow, path::PathBuf, sync::Arc};
 use tokio::{io::AsyncWriteExt, sync::Semaphore};
 use tower_http::{
@@ -47,13 +47,13 @@ use crate::jwt_utils::get_claims_from_jwt_token;
 
 use tokio_util::io::ReaderStream;
 
-use anyhow::{Error, Result, bail};
+use anyhow::{Result, bail};
 
 use crate::handlers::*;
 
 use manta_backend_dispatcher::StaticBackendDispatcher;
 
-use utoipa::{OpenApi, ToSchema, openapi::OpenApi as OpenApiDoc, path};
+use utoipa::{OpenApi, ToSchema, openapi::OpenApi as OpenApiDoc};
 //use utoipa::OpenApi;
 //use openapi_doc::ApiDoc;
 

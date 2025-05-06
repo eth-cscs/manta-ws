@@ -1,21 +1,15 @@
 pub mod types;
 
 use std::{
-    collections::HashMap,
     fs::File,
-    io::{Read, Write},
+    io::Read,
     path::PathBuf,
 };
 
 use config::Config;
 use directories::ProjectDirs;
-use manta_backend_dispatcher::{
-    error::Error,
-    types::{K8sAuth, K8sDetails},
-};
-use types::{MantaConfiguration, Site};
+use manta_backend_dispatcher::error::Error;
 
-use crate::common::{audit::Auditor, kafka::Kafka};
 
 pub fn get_default_config_path() -> PathBuf {
     // XDG Base Directory Specification
