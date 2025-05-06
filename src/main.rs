@@ -83,8 +83,8 @@ async fn main() {
         .route("/cfssession/:cfssession", get(get_cfs_session))
         .route("/cfssession/:cfssession/logs", get(ws_cfs_session_logs))
         .route("/hsm", get(get_hsm))
-        .route("/hsm/:hsm", get(get_hsm_details))
-        .route("/hsm/:hsm/hardware", get(get_hsm_hardware))
+        .route("/hsm/:group", get(get_hsm_details))
+        .route("/hsm/:group/hardware", get(get_hsm_hardware))
         .route("/node/:node/power-off", get(power_off_node))
         .route("/node/:node/power-on", get(power_on_node))
         .route("/node/:node/power-reset", get(power_reset_node))
@@ -937,7 +937,7 @@ async fn get_hsm(headers: HeaderMap) -> Json<serde_json::Value> {
     }
 }
 
-async fn get_hsm_details(Path(hsm): Path<String>, headers: HeaderMap) -> Json<serde_json::Value> {
+async fn get_hsm_details(Path(group): Path<String>, headers: HeaderMap) -> Json<serde_json::Value> {
     /* let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
@@ -1013,7 +1013,7 @@ async fn get_hsm_details(Path(hsm): Path<String>, headers: HeaderMap) -> Json<se
         &shasta_token,
         &shasta_api_url,
         &shasta_root_cert,
-        Some(&[&hsm]),
+        Some(&[&group]),
         None,
     )
     .await
@@ -1034,7 +1034,7 @@ async fn get_hsm_details(Path(hsm): Path<String>, headers: HeaderMap) -> Json<se
     Json(serde_json::to_value(response).unwrap())
 }
 
-async fn get_hsm_hardware(Path(hsm): Path<String>, headers: HeaderMap) -> Json<serde_json::Value> {
+async fn get_hsm_hardware(Path(group): Path<String>, headers: HeaderMap) -> Json<serde_json::Value> {
     /* let settings = get_configuration();
 
     let site_detail_hashmap = settings.get_table("sites").unwrap();
@@ -1110,7 +1110,7 @@ async fn get_hsm_hardware(Path(hsm): Path<String>, headers: HeaderMap) -> Json<s
         &shasta_token,
         &shasta_base_url,
         &shasta_root_cert,
-        Some(&[&hsm]),
+        Some(&[&group]),
         None,
     )
     .await
