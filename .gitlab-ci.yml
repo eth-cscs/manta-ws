@@ -35,3 +35,6 @@ dockerize:
   artifacts:
     paths:
       - Dockerfile  # Optionally keep Dockerfile if needed for later stages
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+      when: always
