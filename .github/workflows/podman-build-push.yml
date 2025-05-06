@@ -3,12 +3,12 @@ name: Build and Push Docker Image to GHCR
 on:
   push:
     branches:
-      - '*'
+      - '**'
     tags:
-      - '*'  # Trigger on any tag push (e.g., v1.0.0)
+      - '**'  # Trigger on any tag push (e.g., v1.0.0)
   pull_request:
     branches:
-      - '*'
+      - '**'
   workflow_dispatch:
     inputs:
       tag:
@@ -25,13 +25,43 @@ env:
   DOCKER_REGISTRY: ghcr.io  # GitHub Container Registry
 
 jobs:
-  dockerize:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # Use the input tag for workflow_dispatch, otherwise use the default ref
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Test build
+        if: github.event_name == 'pull_request'  # Test build to check if everything is find during pull requests
+        run: cargo install --path .
+
+  dockerize:
+    runs-on: ubuntu-latest
+    needs: test  # Depends on successful completion of the test job
+    if: github.event_name != 'pull_request'  # Only run for push or workflow_dispatch, not pull requests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
       - name: Check Podman version
@@ -50,7 +80,8 @@ jobs:
           elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_name }}" == "main" ]]; then
             IMAGE_TAG="latest"
           else
-            IMAGE_TAG="${{ github.ref_name }}"
+            # Sanitize branch name by replacing '/' with '-'
+            IMAGE_TAG=$(echo "${{ github.ref_name }}" | tr '/' '-')
           fi
           # Build the image with the determined tag
           podman build -t ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${IMAGE_TAG} .
