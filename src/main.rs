@@ -1,27 +1,27 @@
 mod backend_api;
-mod backend_dispatcher;
 mod common;
 mod handlers;
 mod http_response;
 mod jwt_utils;
 mod log;
+mod manta_backend_dispatcher;
 
-use ::backend_dispatcher::{
+use ::manta_backend_dispatcher::{
     contracts::BackendTrait,
     interfaces::{cfs::CfsTrait, hsm::group::GroupTrait},
-    types::{K8sAuth, K8sDetails, cfs::CfsSessionGetResponse},
+    types::{K8sAuth, K8sDetails, cfs::session::CfsSessionGetResponse},
 };
 use axum::{
     Json, Router, debug_handler,
     extract::{
         ConnectInfo, Path, Query, WebSocketUpgrade,
-        ws::{Message, WebSocket, Utf8Bytes},
+        ws::{Message, Utf8Bytes, WebSocket},
     },
-    http::{ StatusCode, HeaderMap},
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post, put},
 };
-use axum_extra::{ TypedHeader, headers };
+use axum_extra::{TypedHeader, headers};
 use bytes::Bytes;
 use common::config::types::MantaConfiguration;
 use config::Config;
@@ -51,7 +51,7 @@ use anyhow::{Error, Result, bail};
 
 use crate::handlers::*;
 
-use backend_dispatcher::StaticBackendDispatcher;
+use manta_backend_dispatcher::StaticBackendDispatcher;
 
 use utoipa::{OpenApi, ToSchema, openapi::OpenApi as OpenApiDoc, path};
 //use utoipa::OpenApi;
@@ -99,14 +99,12 @@ async fn main() {
         .route("/console/{xname}", get(ws_console))
         .route("/cfssession/{cfssession}", get(get_cfs_session))
         .route("/cfssession/{cfssession}/logs", get(ws_cfs_session_logs))
-        .route("/hsm", get(get_hsm))
-
-        .route("/hsm/{group}", get(get_hsm_details))
+        .route("/hsm", get(get_all_groups))
+        .route("/hsm/{group}", get(get_group_details))
         .route("/hsm/{group}/hardware", get(get_hsm_hardware))
         .route("/node/{node}/power-off", get(power_off_node))
         .route("/node/{node}/power-on", get(power_on_node))
         .route("/node/{node}/power-reset", get(power_reset_node))
-
         .route(
             "/node-migration/target/{target}/parent/{parent}",
             put(node_migration),
@@ -121,14 +119,13 @@ async fn main() {
     // `axum::Server` is a re-export of `hyper::Server`
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("listening on {}", addr);
-//    axum::Server::bind(&addr)
-//        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-//        .await
-//        .unwrap();
+    //    axum::Server::bind(&addr)
+    //        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+    //        .await
+    //        .unwrap();
     axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app)
         .await
         .unwrap()
-
 }
 
 // the input to our `create_user` handler
@@ -783,12 +780,14 @@ async fn handle_socket(socket: WebSocket, _who: SocketAddr, xname: String) {
     // This task will receive messages from the conman container and send them to the client
     let _send_task = tokio::spawn(async move {
         let _ = sender
-            .send(Message::Text(Utf8Bytes::from(format!("Connected to {}\n\r", xname))))
+            .send(Message::Text(Utf8Bytes::from(format!(
+                "Connected to {}\n\r",
+                xname
+            ))))
             .await;
 
         let _ = sender
-            .send(Message::Text(
-                Utf8Bytes::from(
+            .send(Message::Text(Utf8Bytes::from(
                 "User &. key combination to exit the console\n\r".to_string(),
             )))
             .await;

@@ -7,12 +7,12 @@ use std::{
     path::PathBuf,
 };
 
-use backend_dispatcher::{
+use config::Config;
+use directories::ProjectDirs;
+use manta_backend_dispatcher::{
     error::Error,
     types::{K8sAuth, K8sDetails},
 };
-use config::Config;
-use directories::ProjectDirs;
 use types::{MantaConfiguration, Site};
 
 use crate::common::{audit::Auditor, kafka::Kafka};

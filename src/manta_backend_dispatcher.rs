@@ -9,11 +9,12 @@ use std::{collections::HashMap, path::PathBuf, pin::Pin};
 /// To add new functionalities:
 /// # Implement new functionalities to BackendTrait implementation
 /// NOTE: we assume functionalities are already added to the BackendTrait in 'backend' crate
-use backend_dispatcher::{
+use manta_backend_dispatcher::{
     contracts::BackendTrait,
     error::Error,
     interfaces::{
         apply_hw_cluster_pin::ApplyHwClusterPin,
+        apply_sat_file::SatTrait,
         apply_session::ApplySessionTrait,
         bss::BootParametersTrait,
         cfs::CfsTrait,
@@ -25,14 +26,16 @@ use backend_dispatcher::{
         migrate_backup::MigrateBackupTrait,
         migrate_restore::MigrateRestoreTrait,
         pcs::PCSTrait,
-        sat::SatTrait,
     },
     types::{
-        BootParameters, BosSessionTemplate, Component, ComponentArrayPostArray, Group,
-        HWInventoryByLocationList, K8sDetails, NodeMetadataArray,
+        BootParameters, Component, ComponentArrayPostArray, Group, HWInventoryByLocationList,
+        K8sDetails, NodeMetadataArray,
+        bos::session_template::BosSessionTemplate,
         cfs::{
-            CfsConfigurationResponse, CfsSessionGetResponse, CfsSessionPostRequest, Layer,
-            LayerDetails, cfs_configuration_request::CfsConfigurationRequest,
+            cfs_configuration_details::LayerDetails,
+            cfs_configuration_request::CfsConfigurationRequest,
+            cfs_configuration_response::{CfsConfigurationResponse, Layer},
+            session::{CfsSessionGetResponse, CfsSessionPostRequest},
         },
         hsm::inventory::{RedfishEndpoint, RedfishEndpointArray},
         ims::Image,
@@ -1096,12 +1099,9 @@ impl SatTrait for StaticBackendDispatcher {
         shasta_root_cert: &[u8],
         vault_base_url: &str,
         vault_secret_path: &str,
-        // vault_role_id: &str,
         k8s_api_url: &str,
         shasta_k8s_secrets: serde_json::Value,
-        // sat_file_content: String,
         sat_template_file_yaml: serde_yaml::Value,
-        hsm_group_param_opt: Option<&String>,
         hsm_group_available_vec: &Vec<String>,
         ansible_verbosity_opt: Option<u8>,
         ansible_passthrough_opt: Option<&String>,
@@ -1109,8 +1109,6 @@ impl SatTrait for StaticBackendDispatcher {
         gitea_token: &str,
         do_not_reboot: bool,
         watch_logs: bool,
-        image_only: bool,
-        session_template_only: bool,
         debug_on_failure: bool,
         dry_run: bool,
     ) -> Result<(), Error> {
@@ -1122,12 +1120,9 @@ impl SatTrait for StaticBackendDispatcher {
                     shasta_root_cert,
                     vault_base_url,
                     vault_secret_path,
-                    // vault_role_id,
                     k8s_api_url,
                     shasta_k8s_secrets,
-                    // sat_file_content,
                     sat_template_file_yaml,
-                    hsm_group_param_opt,
                     hsm_group_available_vec,
                     ansible_verbosity_opt,
                     ansible_passthrough_opt,
@@ -1135,8 +1130,6 @@ impl SatTrait for StaticBackendDispatcher {
                     gitea_token,
                     do_not_reboot,
                     watch_logs,
-                    image_only,
-                    session_template_only,
                     debug_on_failure,
                     dry_run,
                 )
@@ -1149,12 +1142,9 @@ impl SatTrait for StaticBackendDispatcher {
                     shasta_root_cert,
                     vault_base_url,
                     vault_secret_path,
-                    // vault_role_id,
                     k8s_api_url,
                     shasta_k8s_secrets,
-                    // sat_file_content,
                     sat_template_file_yaml,
-                    hsm_group_param_opt,
                     hsm_group_available_vec,
                     ansible_verbosity_opt,
                     ansible_passthrough_opt,
@@ -1162,8 +1152,6 @@ impl SatTrait for StaticBackendDispatcher {
                     gitea_token,
                     do_not_reboot,
                     watch_logs,
-                    image_only,
-                    session_template_only,
                     debug_on_failure,
                     dry_run,
                 )
@@ -1251,7 +1239,7 @@ impl ImsTrait for StaticBackendDispatcher {
 }
 
 impl ApplySessionTrait for StaticBackendDispatcher {
-    async fn apply_session(
+    async fn i_apply_session(
         &self,
         gitea_token: &str,
         gitea_base_url: &str,
@@ -1272,7 +1260,7 @@ impl ApplySessionTrait for StaticBackendDispatcher {
     ) -> Result<(String, String), Error> {
         match self {
             CSM(b) => {
-                b.apply_session(
+                b.i_apply_session(
                     gitea_token,
                     gitea_base_url,
                     shasta_token,
@@ -1293,7 +1281,7 @@ impl ApplySessionTrait for StaticBackendDispatcher {
                 .await
             }
             OCHAMI(b) => {
-                b.apply_session(
+                b.i_apply_session(
                     gitea_token,
                     gitea_base_url,
                     shasta_token,
