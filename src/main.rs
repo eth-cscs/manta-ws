@@ -243,27 +243,8 @@ async fn get_cfs_session(Path(cfs_session_name): Path<String>) -> Json<Value> {
         }
     };
 
-    let k8s_details = site
-        .k8s
-        .as_ref()
-        .expect("ERROR - k8s section not found in configuration");
-
     let backend_tech = &site.backend;
     let shasta_base_url = &site.shasta_base_url;
-    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
-        // old configuration file. TODO: remove this when needed in the future and all users are
-        // using the right configuration file
-        .strip_suffix("/apis")
-        .unwrap_or(&shasta_base_url);
-
-    let shasta_api_url = match backend_tech.as_str() {
-        "csm" => shasta_barebone_url.to_owned() + "/apis",
-        "ochami" => shasta_barebone_url.to_owned(),
-        _ => {
-            eprintln!("Invalid backend technology");
-            std::process::exit(1);
-        }
-    };
 
     let root_ca_cert_file = &site.root_ca_cert_file;
 
@@ -327,21 +308,6 @@ async fn ws_cfs_session_logs(
 
     let backend_tech = &site.backend;
     let shasta_base_url = &site.shasta_base_url;
-    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
-        // old configuration file. TODO: remove this when needed in the future and all users are
-        // using the right configuration file
-        .strip_suffix("/apis")
-        .unwrap_or(&shasta_base_url);
-
-    let shasta_api_url = match backend_tech.as_str() {
-        "csm" => shasta_barebone_url.to_owned() + "/apis",
-        "ochami" => shasta_barebone_url.to_owned(),
-        _ => {
-            // FIXME: Do not exit like this
-            eprintln!("Invalid backend technology");
-            std::process::exit(1);
-        }
-    };
 
     let root_ca_cert_file = &site.root_ca_cert_file;
 
@@ -352,21 +318,6 @@ async fn ws_cfs_session_logs(
 
     // Get auth token
     let shasta_token = backend.get_api_token(&site_name).await.unwrap();
-
-    let shasta_k8s_secrets = match &k8s_details.authentication {
-        K8sAuth::Native {
-            certificate_authority_data,
-            client_certificate_data,
-            client_key_data,
-        } => {
-            serde_json::json!({ "certificate-authority-data": certificate_authority_data, "client-certificate-data": client_certificate_data, "client-key-data": client_key_data })
-        }
-        K8sAuth::Vault {
-            base_url: vault_base_url,
-        } => fetch_shasta_k8s_secrets_from_vault(&vault_base_url, &shasta_token, &site_name)
-            .await
-            .unwrap(),
-    };
 
     let user_agent = if let Some(TypedHeader(user_agent)) = user_agent {
         user_agent.to_string()
@@ -399,118 +350,6 @@ async fn get_cfs_session_logs(
     cfs_session_name: String,
     k8s_details: K8sDetails,
 ) {
-    /* let settings = get_configuration();
-
-    let site_detail_hashmap = settings.get_table("sites").unwrap();
-    let site_detail_value = site_detail_hashmap
-        .get("alps")
-        .unwrap()
-        .clone()
-        .into_table()
-        .unwrap();
-
-    let vault_base_url = site_detail_value.get("vault_base_url").unwrap().to_string();
-    let vault_role_id = site_detail_value.get("vault_role_id").unwrap().to_string();
-    let vault_secret_path = site_detail_value
-        .get("vault_secret_path")
-        .unwrap()
-        .to_string();
-    let k8s_api_url = site_detail_value.get("k8s_api_url").unwrap().to_string();
-
-    // GET K8S CLIENT
-
-    let shasta_k8s_secrets = mesa::common::vault::http_client::fetch_shasta_k8s_secrets(
-        &vault_base_url,
-        &vault_secret_path,
-        &vault_role_id,
-    )
-    .await
-    .expect("ERROR - Unable to fetch K8s secrets");
-
-    let client =
-        mesa::common::kubernetes::get_k8s_client_programmatically(&k8s_api_url, shasta_k8s_secrets)
-            .await
-            .unwrap();
-
-    // GET CFS SESSION
-
-    /* let cfs_session_table_data_list =
-    manta::cfs::session::get_sessions(shasta_token, shasta_base_url, None, Some(&cfs_session_name), Some(&1))
-        .await; */
-
-    // cfs_session_name = cfs_session_table_data_list.first().unwrap()[0];
-
-    // GET CFS SESSION LOGS
-
-    let _ = socket
-        .send(Message::Text(format!(
-            "Fetching CFS session logs for {} ...",
-            cfs_session_name
-        )))
-        .await;
-
-    let (ansible_container, cfs_session_pod, pods_api) =
-        kubernetes::get_cfs_session_container_ansible_logs_details(client, &cfs_session_name)
-            .await
-            .unwrap();
-
-    let mut container_status =
-        kubernetes::get_container_status(&cfs_session_pod, &ansible_container.name);
-
-    let mut attempt = 0;
-    let max_attempts = 3;
-
-    if container_status.as_ref().unwrap().terminated.is_some() {
-        // Print CFS session logs already terminated on screen
-        let logs_stream_rslt =
-            kubernetes::get_container_logs_stream(&ansible_container, &cfs_session_pod, &pods_api)
-                .await;
-
-        if let Ok(mut logs_stream) = logs_stream_rslt {
-            while let Some(line) = logs_stream.try_next().await.unwrap() {
-                if line.is_empty() {
-                    // FIXME: This is a hack to make sure that the logs are displayed properly
-                    // because for some reason websocat stops displaying logs if an empty line is
-                    // sent
-                    let _ = socket.send(Message::Text(" ".to_string())).await;
-                } else {
-                    let _ = socket.send(Message::Text(line)).await;
-                }
-            }
-        }
-    } else {
-        // Print current CFS session logs on screen
-        while container_status.as_ref().unwrap().running.is_some() && attempt < max_attempts {
-            let logs_stream_rslt = kubernetes::get_container_logs_stream(
-                &ansible_container,
-                &cfs_session_pod,
-                &pods_api,
-            )
-            .await;
-
-            if let Ok(mut logs_stream) = logs_stream_rslt {
-                while let Ok(line_opt) = logs_stream.try_next().await {
-                    if let Some(line) = line_opt {
-                        println!("{}", line);
-                        let _ = socket.send(Message::Text(line)).await;
-                    } else {
-                        attempt += 1;
-                    }
-                }
-            } else {
-                attempt += 1;
-            }
-
-            container_status =
-                kubernetes::get_container_status(&cfs_session_pod, &ansible_container.name);
-        }
-    } */
-
-    dbg!(&shasta_token);
-    dbg!(&site_name);
-    dbg!(&cfs_session_name);
-    dbg!(&k8s_details);
-
     let logs_stream = backend
         .get_session_logs_stream(&shasta_token, &site_name, &cfs_session_name, &k8s_details)
         .await
@@ -574,36 +413,6 @@ pub fn get_csm_root_cert_content(site: &str) -> Vec<u8> {
     };
 
     buf
-}
-
-pub async fn get_hsm_name_available_from_jwt_or_all(
-    shasta_token: &str,
-    shasta_base_url: &str,
-    shasta_root_cert: &[u8],
-) -> Vec<String> {
-    let mut realm_access_role_vec = get_claims_from_jwt_token(shasta_token)
-        .unwrap()
-        .pointer("/realm_access/roles")
-        .unwrap_or(&serde_json::json!([]))
-        .as_array()
-        .unwrap_or(&Vec::new())
-        .iter()
-        .map(|role_value| role_value.as_str().unwrap().to_string())
-        .collect::<Vec<String>>();
-
-    realm_access_role_vec
-        .retain(|role| !role.eq("offline_access") && !role.eq("uma_authorization"));
-
-    if !realm_access_role_vec.is_empty() {
-        realm_access_role_vec
-    } else {
-        mesa::hsm::group::http_client::get_all(shasta_token, shasta_base_url, shasta_root_cert)
-            .await
-            .unwrap()
-            .iter()
-            .map(|hsm_group| hsm_group.label.clone())
-            .collect::<Vec<String>>()
-    }
 }
 
 async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
@@ -717,20 +526,6 @@ async fn handle_socket(socket: WebSocket, _who: SocketAddr, xname: String) {
 
     let backend_tech = &site.backend;
     let shasta_base_url = &site.shasta_base_url;
-    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
-        // old configuration file. TODO: remove this when needed in the future and all users are
-        // using the right configuration file
-        .strip_suffix("/apis")
-        .unwrap_or(&shasta_base_url);
-
-    let shasta_api_url = match backend_tech.as_str() {
-        "csm" => shasta_barebone_url.to_owned() + "/apis",
-        "ochami" => shasta_barebone_url.to_owned(),
-        _ => {
-            eprintln!("Invalid backend technology");
-            std::process::exit(1);
-        }
-    };
 
     let root_ca_cert_file = &site.root_ca_cert_file;
 
@@ -856,7 +651,7 @@ fn process_message(msg: Message, who: SocketAddr) -> ControlFlow<(), ()> {
     ControlFlow::Continue(())
 }
 
-async fn get_service_health(headers: HeaderMap, service: &str) -> Result<Json<serde_json::Value>> {
+async fn get_service_health(service: &str) -> Result<Json<serde_json::Value>> {
     // Configuration
     let settings = common::config::get_configuration().await?;
 
@@ -872,17 +667,6 @@ async fn get_service_health(headers: HeaderMap, service: &str) -> Result<Json<se
 
     let backend_tech = &site.backend;
     let shasta_base_url = &site.shasta_base_url;
-    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
-        // old configuration file. TODO: remove this when needed in the future and all users are
-        // using the right configuration file
-        .strip_suffix("/apis")
-        .unwrap_or(&shasta_base_url);
-
-    let shasta_api_url = match backend_tech.as_str() {
-        "csm" => shasta_barebone_url.to_owned() + "/apis",
-        "ochami" => shasta_barebone_url.to_owned(),
-        _ => bail!("Invalid backend technology".to_string()),
-    };
 
     let root_ca_cert_file = &site.root_ca_cert_file;
 
@@ -911,8 +695,8 @@ async fn get_service_health(headers: HeaderMap, service: &str) -> Result<Json<se
     Ok(Json(response))
 }
 
-async fn get_cfs_health_check(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
-    let response = get_service_health(headers, "cfs")
+async fn get_cfs_health_check() -> Result<Json<serde_json::Value>, StatusCode> {
+    let response = get_service_health("cfs")
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     // NOTE: sending always 500 error is a BAD practice, we
@@ -922,8 +706,8 @@ async fn get_cfs_health_check(headers: HeaderMap) -> Result<Json<serde_json::Val
     Ok(response)
 }
 
-async fn get_bos_health_check(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
-    let response = get_service_health(headers, "bos")
+async fn get_bos_health_check() -> Result<Json<serde_json::Value>, StatusCode> {
+    let response = get_service_health("bos")
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     // NOTE: sending always 500 error is a BAD practice, we
@@ -1035,10 +819,7 @@ async fn get_group_details(
     Json(serde_json::to_value(response).unwrap())
 }
 
-async fn get_hsm_hardware(
-    Path(group): Path<String>,
-    headers: HeaderMap,
-) -> Json<serde_json::Value> {
+async fn get_hsm_hardware(Path(group): Path<String>) -> Json<serde_json::Value> {
     // Configuration
     let settings = common::config::get_configuration().await.unwrap();
 
@@ -1057,20 +838,6 @@ async fn get_hsm_hardware(
 
     let backend_tech = &site.backend;
     let shasta_base_url = &site.shasta_base_url;
-    let shasta_barebone_url = shasta_base_url // HACK to not break compatibility with
-        // old configuration file. TODO: remove this when needed in the future and all users are
-        // using the right configuration file
-        .strip_suffix("/apis")
-        .unwrap_or(&shasta_base_url);
-
-    let shasta_api_url = match backend_tech.as_str() {
-        "csm" => shasta_barebone_url.to_owned() + "/apis",
-        "ochami" => shasta_barebone_url.to_owned(),
-        _ => {
-            eprintln!("Invalid backend technology");
-            std::process::exit(1);
-        }
-    };
 
     let root_ca_cert_file = &site.root_ca_cert_file;
 
