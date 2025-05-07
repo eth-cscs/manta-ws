@@ -53,8 +53,9 @@ use crate::handlers::*;
 use manta_backend_dispatcher::StaticBackendDispatcher;
 
 use utoipa::{OpenApi, ToSchema, openapi::OpenApi as OpenApiDoc};
-//use utoipa::OpenApi;
-//use openapi_doc::ApiDoc;
+
+use mesa::backend_connector::Csm;
+use ochami_rs::backend_connector::Ochami;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -310,8 +311,6 @@ async fn get_cfs_session(Path(cfs_session_name): Path<String>) -> Json<Value> {
             tracing::error!("Failed to get CFS sessions. Reason:\n{e}");
             std::process::exit(1);
         });
-
-    dbg!(&cfs_session_vec);
 
     Json(serde_json::to_value(cfs_session_vec).unwrap())
 }
