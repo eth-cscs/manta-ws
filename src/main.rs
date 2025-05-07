@@ -54,9 +54,6 @@ use manta_backend_dispatcher::StaticBackendDispatcher;
 
 use utoipa::{OpenApi, ToSchema, openapi::OpenApi as OpenApiDoc};
 
-use mesa::backend_connector::Csm;
-use ochami_rs::backend_connector::Ochami;
-
 #[derive(OpenApi)]
 #[openapi(
     info(
