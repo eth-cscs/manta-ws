@@ -62,7 +62,7 @@ jobs:
       github.event_name != 'pull_request' &&
       (github.event_name == 'workflow_dispatch' ||
        github.ref_type == 'tag' ||
-       github.ref_name == 'feature/auto-changelog')  
+       github.ref_name == 'main')  
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -107,7 +107,7 @@ jobs:
           git push
 
           #      - name: Create Pull Request
-          #        if: steps.generate.outputs.changes == 'true' && github.ref_name == 'feature/auto-changelog'
+          #        if: steps.generate.outputs.changes == 'true' && github.ref_name == 'main'
           #        uses: peter-evans/create-pull-request@v4
           #        with:
           #          token: ${{ secrets.GITHUB_TOKEN }}
