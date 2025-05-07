@@ -626,15 +626,19 @@ async fn handle_socket(socket: WebSocket, xname: String) {
     // This second task will receive messages from client and print them on server console
     let _recv_task = tokio::spawn(async move {
         while let Some(message) = receiver.next().await {
-            match message.as_ref().unwrap() {
-                Message::Close(_) => {
-                    println!("Client sent CLOSE message:\n{:#?}", message.unwrap());
+            match message.as_ref() {
+                Ok(Message::Close(_)) => {
+                    println!("Client sent CLOSE message:\n{:?}", message.unwrap());
+                    break;
+                }
+                Err(e) => {
+                    println!("Connection interrupted:\n{:?}", e);
                     break;
                 }
                 _ => {
                     let msg = message.unwrap();
                     let value = msg.to_text().unwrap();
-                    println!("Message from xterm web client:\n{:#?}", value);
+                    println!("Message from xterm web client:\n{:?}", value);
                     let _ = stdin_writer.write_all(value.as_bytes()).await;
                 }
             }
