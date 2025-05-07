@@ -62,7 +62,7 @@ jobs:
       github.event_name != 'pull_request' &&
       (github.event_name == 'workflow_dispatch' ||
        github.ref_type == 'tag' ||
-       github.ref_name == 'feature/auto-changelog')  # Restrict to main branch, tags, or workflow_dispatch
+       github.ref_name == 'feature/auto-changelog')  
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
