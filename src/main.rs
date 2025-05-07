@@ -87,6 +87,7 @@ async fn main() {
         .route("/", get(root))
         .route("/test/whoami", get(test_whoami))
         .route("/test/ping", get(test_ping))
+        .route("/test/ws", get(test_ws))
         .route("/openapi", get(get_openapi))
         .route("/version", get(get_version))
         // `POST /users` goes to `create_user`
@@ -199,6 +200,35 @@ async fn get_openapi() -> impl IntoResponse {
 )]
 async fn test_ping() -> &'static str {
     "Pong!"
+}
+
+#[utoipa::path(
+    get,
+    path = "/test/ws",
+    responses(
+        (status = 200, description = "Websocket test endpoint", body = String)
+    )
+)]
+async fn test_ws(ws: WebSocketUpgrade) -> axum::response::Response {
+    println!("Websocket test endpoint");
+    ws.on_upgrade(handle_socket_test_ws)
+}
+
+async fn handle_socket_test_ws(mut socket: WebSocket) {
+    while let Some(msg) = socket.recv().await {
+        let msg = if let Ok(msg) = msg {
+            println!("Received message: {:?}", msg);
+            msg
+        } else {
+            // client disconnected
+            return;
+        };
+
+        if socket.send(msg).await.is_err() {
+            // client disconnected
+            return;
+        }
+    }
 }
 
 #[utoipa::path(
@@ -484,25 +514,21 @@ async fn ws_console(
     Path(xname): Path<String>,
     ws: WebSocketUpgrade,
     user_agent: Option<TypedHeader<headers::UserAgent>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    _headers: HeaderMap,
 ) -> impl IntoResponse {
-    // let cookie_header = headers.get("cookie").unwrap().to_str().unwrap();
-
     let user_agent = if let Some(TypedHeader(user_agent)) = user_agent {
         user_agent.to_string()
     } else {
         String::from("Unknown browser")
     };
 
-    println!("`{user_agent}` at {addr} connected.");
+    println!("`{user_agent}` connected.");
     // finalize the upgrade process by returning upgrade callback.
     // we can customize the callback by sending additional info such as address.
-    ws.on_upgrade(move |socket| handle_socket(socket, addr, xname))
+    ws.on_upgrade(move |socket| handle_socket(socket, xname))
 }
 
 /// Actual websocket statemachine (one will be spawned per connection)
-async fn handle_socket(socket: WebSocket, _who: SocketAddr, xname: String) {
+async fn handle_socket(socket: WebSocket, xname: String) {
     // Configuration
     let settings = common::config::get_configuration().await.unwrap();
 
