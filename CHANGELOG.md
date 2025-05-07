@@ -1,8 +1,35 @@
-## What's Changed in 0.1.5
-* chore: typo
-* add auto-changelog feature
+## What's Changed in 0.1.7
+* chore: improve the docker image creation by @Masber in [#19](https://github.com/eth-cscs/manta-ws/pull/19)
+* chore(docker): add again jobs flag by @t-h2o
+* feat(rust): add optimizations for building release
+* chore(docker): change the way to build the binary
+* chore(docker): add flag to apt
+* chore(docker): upgrade the builder
+* chore(docker): use the complete path
+* chore(docker): as casing
+* feat: auto changelog generation on main branch by @Masber in [#20](https://github.com/eth-cscs/manta-ws/pull/20)
+* add the changelog generation to main branch by @aescoubas
+* chore: update CHANGELOG.md for v0.1.5 by @actions-user
+* chore: typo by @aescoubas
+* add auto-changelog feature by @aescoubas
 
-**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.5...0.1.5
+## New Contributors
+* @actions-user made their first contribution
+* @t-h2o made their first contribution
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.7...0.1.7
+
+## What's Changed in v0.1.7
+* chore: Release manta-ws version 0.1.7 by @Masber
+* fix: websockets connecting to node's console by @Masber
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.6...v0.1.7
+
+## What's Changed in v0.1.6
+* chore: Release manta-ws version 0.1.6 by @Masber
+* fix: websockets connecting to node's console by @Masber
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.5...v0.1.6
 
 ## What's Changed in v0.1.5
 * chore: Release manta-ws version 0.1.5 by @Masber
