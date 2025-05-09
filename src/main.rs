@@ -8,8 +8,9 @@ mod manta_backend_dispatcher;
 
 use ::manta_backend_dispatcher::{
     contracts::BackendTrait,
-    interfaces::{cfs::CfsTrait, hsm::group::GroupTrait, pcs::PCSTrait},
-    types::{K8sAuth, K8sDetails},
+    error::Error,
+    interfaces::{bss::BootParametersTrait, cfs::CfsTrait, hsm::group::GroupTrait, pcs::PCSTrait},
+    types::{BootParameters, K8sAuth, K8sDetails},
 };
 use axum::{
     Json, Router, debug_handler,
@@ -93,6 +94,8 @@ async fn main() {
         .route("/kernel-parameters", get(get_kernel_parameters))
         .route("/cfs/health", get(get_cfs_health_check))
         .route("/bos/health", get(get_bos_health_check))
+        .route("/bss/boot-parameters", get(get_bss_boot_parameters))
+        .route("/bss/boot-parameters", post(post_bss_boot_parameters))
         .route("/authenticate", get(authenticate))
         .route("/console/{xname}", get(ws_console))
         .route("/cfssession/{cfssession}", get(get_cfs_session))
@@ -741,6 +744,81 @@ async fn get_bos_health_check() -> Result<Json<serde_json::Value>, StatusCode> {
     // then create the right HTTP status code based on it
 
     Ok(response)
+}
+
+#[axum::debug_handler]
+async fn get_bss_boot_parameters(
+    headers: HeaderMap,
+    Json(nodes): Json<&[String]>,
+) -> Result<Vec<BootParameters>, Error> {
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
+
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
+
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
+
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
+    };
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let auth_token = headers.get("authorization").unwrap().to_str().unwrap();
+
+    backend.get_bootparameters(auth_token, nodes).await
+}
+
+async fn post_bss_boot_parameters(
+    headers: HeaderMap,
+    Json(boot_parameters): Json<BootParameters>,
+) -> Result<(), Error> {
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
+
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
+
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
+
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
+    };
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let auth_token = headers.get("authorization").unwrap().to_str().unwrap();
+
+    backend
+        .add_bootparameters(auth_token, &boot_parameters)
+        .await
 }
 
 async fn get_all_groups(headers: HeaderMap) -> Json<serde_json::Value> {
