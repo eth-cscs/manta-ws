@@ -18,7 +18,7 @@ use axum::{
         ws::{Message, Utf8Bytes, WebSocket},
     },
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, post, put},
 };
 use axum_extra::{TypedHeader, headers};
@@ -88,20 +88,20 @@ async fn main() {
         .route("/test/ws", get(test_ws))
         .route("/openapi", get(get_openapi))
         .route("/version", get(get_version))
-        // `POST /users` goes to `create_user`
         .route("/users", post(create_user))
-        .route("/kernel-parameters", get(get_kernel_parameters))
         .route("/cfs/health", get(get_cfs_health_check))
         .route("/bos/health", get(get_bos_health_check))
-        .route("/bss/boot-parameters", get(get_bss_boot_parameters))
+        .route("/kernel-parameters", get(get_kernel_parameters))
+        .route("/bss/boot-parameters", get(get_all_bss_boot_parameters))
+        .route("/bss/boot-parameters/{xname}", get(get_bss_boot_parameters))
         .route("/bss/boot-parameters", post(post_bss_boot_parameters))
         .route("/authenticate", get(authenticate))
         .route("/console/{xname}", get(ws_console))
         .route("/cfssession/{cfssession}", get(get_cfs_session))
         .route("/cfssession/{cfssession}/logs", get(ws_cfs_session_logs))
-        .route("/hsm", get(get_all_groups))
-        .route("/hsm/{group}", get(get_group_details))
-        .route("/hsm/{group}/hardware", get(get_hsm_hardware))
+        .route("/group", get(get_all_groups))
+        .route("/group/{group}", get(get_group_details))
+        .route("/group/{group}/hardware", get(get_hsm_hardware))
         .route("/node/{node}/power-off", get(power_off_node))
         .route("/node/{node}/power-on", get(power_on_node))
         .route("/node/{node}/power-reset", get(power_reset_node))
@@ -168,15 +168,24 @@ async fn get_version() -> &'static str {
     get,
     path = "/test/whoami",
     responses(
-        (status = 200, description = "Test current user", body = String)
+        (status = 200, description = "Test current user", body = String),
+        (status = UNAUTHORIZED, description = "Authentication header/token missing")
     )
 )]
-async fn test_whoami(headers: HeaderMap) -> String {
-    let token = headers.get("authorization").unwrap().to_str().unwrap();
+async fn test_whoami(headers: HeaderMap) -> Result<String, StatusCode> {
+    // Get auth token
+    let auth_token = if let Some(auth_header) = headers.get("authorization") {
+        auth_header.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
 
-    let claims_json = get_claims_from_jwt_token(token).unwrap();
+    let claims_json = get_claims_from_jwt_token(auth_token).unwrap();
 
-    format!("Hello {}!!!", claims_json["name"].as_str().unwrap())
+    Ok(format!(
+        "Hello {}!!!",
+        claims_json["name"].as_str().unwrap()
+    ))
 }
 
 #[utoipa::path(
@@ -256,7 +265,10 @@ async fn create_user(
     (StatusCode::CREATED, Json(user))
 }
 
-async fn get_cfs_session(Path(cfs_session_name): Path<String>) -> Json<Value> {
+async fn get_cfs_session(
+    headers: HeaderMap,
+    Path(cfs_session_name): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
     // Configuration
     let settings = common::config::get_configuration().await.unwrap();
 
@@ -284,16 +296,18 @@ async fn get_cfs_session(Path(cfs_session_name): Path<String>) -> Json<Value> {
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
+    let auth_token = if let Some(auth_header) = headers.get("authorization") {
+        auth_header.to_str().unwrap().split(" ").nth(1).unwrap()
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    };
 
-    let hsm_group_available_vec: Vec<String> = backend
-        .get_group_name_available(&shasta_token)
-        .await
-        .unwrap();
+    let hsm_group_available_vec: Vec<String> =
+        backend.get_group_name_available(&auth_token).await.unwrap();
 
     let cfs_session_vec = backend
         .get_and_filter_sessions(
-            &shasta_token,
+            &auth_token,
             shasta_base_url,
             &shasta_root_cert,
             Some(hsm_group_available_vec),
@@ -311,10 +325,11 @@ async fn get_cfs_session(Path(cfs_session_name): Path<String>) -> Json<Value> {
             std::process::exit(1);
         });
 
-    Json(serde_json::to_value(cfs_session_vec).unwrap())
+    Ok(Json(serde_json::to_value(cfs_session_vec).unwrap()))
 }
 
 async fn ws_cfs_session_logs(
+    headers: HeaderMap,
     Path(cfs_session_name): Path<String>,
     ws: WebSocketUpgrade,
     user_agent: Option<TypedHeader<headers::UserAgent>>,
@@ -345,7 +360,14 @@ async fn ws_cfs_session_logs(
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
+    let auth_header = headers.get("authorization").unwrap();
+    let auth_token = auth_header
+        .to_str()
+        .unwrap()
+        .split(" ")
+        .nth(1)
+        .unwrap()
+        .to_string();
 
     let user_agent = if let Some(TypedHeader(user_agent)) = user_agent {
         user_agent.to_string()
@@ -361,7 +383,7 @@ async fn ws_cfs_session_logs(
             socket,
             addr,
             backend,
-            shasta_token,
+            auth_token,
             site_name,
             cfs_session_name,
             k8s_details,
@@ -509,6 +531,7 @@ async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
 /// This is the last point where we can extract TCP/IP metadata such as IP address of the client
 /// as well as things from HTTP headers such as user-agent of the browser etc.
 async fn ws_console(
+    headers: HeaderMap,
     Path(xname): Path<String>,
     ws: WebSocketUpgrade,
     user_agent: Option<TypedHeader<headers::UserAgent>>,
@@ -522,11 +545,11 @@ async fn ws_console(
     println!("`{user_agent}` connected.");
     // finalize the upgrade process by returning upgrade callback.
     // we can customize the callback by sending additional info such as address.
-    ws.on_upgrade(move |socket| handle_socket(socket, xname))
+    ws.on_upgrade(move |socket| handle_socket(headers, socket, xname))
 }
 
 /// Actual websocket statemachine (one will be spawned per connection)
-async fn handle_socket(socket: WebSocket, xname: String) {
+async fn handle_socket(headers: HeaderMap, socket: WebSocket, xname: String) {
     // Configuration
     let settings = common::config::get_configuration().await.unwrap();
 
@@ -559,7 +582,8 @@ async fn handle_socket(socket: WebSocket, xname: String) {
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap().to_string();
 
     let shasta_k8s_secrets = match &k8s_details.authentication {
         K8sAuth::Native {
@@ -571,7 +595,7 @@ async fn handle_socket(socket: WebSocket, xname: String) {
         }
         K8sAuth::Vault {
             base_url: vault_base_url,
-        } => fetch_shasta_k8s_secrets_from_vault(&vault_base_url, &shasta_token, &site_name)
+        } => fetch_shasta_k8s_secrets_from_vault(&vault_base_url, &auth_token, &site_name)
             .await
             .unwrap(),
     };
@@ -679,7 +703,7 @@ fn process_message(msg: Message, who: SocketAddr) -> ControlFlow<(), ()> {
     ControlFlow::Continue(())
 }
 
-async fn get_service_health(service: &str) -> Result<Json<serde_json::Value>> {
+async fn get_service_health(headers: HeaderMap, service: &str) -> Result<Json<serde_json::Value>> {
     // Configuration
     let settings = common::config::get_configuration().await?;
 
@@ -704,18 +728,19 @@ async fn get_service_health(service: &str) -> Result<Json<serde_json::Value>> {
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = backend.get_api_token(&site_name).await?;
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap().to_string();
 
     let response: Value = match service {
         // NOTE: sending always 500 error is a BAD practice, we
         // should do proper error handling by making mesa to return the right error code,
         // then create the right HTTP status code based on it
         "cfs" => {
-            mesa::cfs::common::health_check(&shasta_token, &shasta_base_url, &shasta_root_cert)
+            mesa::cfs::common::health_check(&auth_token, &shasta_base_url, &shasta_root_cert)
                 .await?
         }
         "bos" => {
-            mesa::bos::health_check::get(&shasta_token, &shasta_base_url, &shasta_root_cert).await?
+            mesa::bos::health_check::get(&auth_token, &shasta_base_url, &shasta_root_cert).await?
         }
         _ => bail!("Invalid service name"),
     };
@@ -723,8 +748,8 @@ async fn get_service_health(service: &str) -> Result<Json<serde_json::Value>> {
     Ok(Json(response))
 }
 
-async fn get_cfs_health_check() -> Result<Json<serde_json::Value>, StatusCode> {
-    let response = get_service_health("cfs")
+async fn get_cfs_health_check(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
+    let response = get_service_health(headers, "cfs")
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     // NOTE: sending always 500 error is a BAD practice, we
@@ -734,8 +759,8 @@ async fn get_cfs_health_check() -> Result<Json<serde_json::Value>, StatusCode> {
     Ok(response)
 }
 
-async fn get_bos_health_check() -> Result<Json<serde_json::Value>, StatusCode> {
-    let response = get_service_health("bos")
+async fn get_bos_health_check(headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
+    let response = get_service_health(headers, "bos")
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     // NOTE: sending always 500 error is a BAD practice, we
@@ -745,11 +770,7 @@ async fn get_bos_health_check() -> Result<Json<serde_json::Value>, StatusCode> {
     Ok(response)
 }
 
-#[axum::debug_handler]
-async fn get_bss_boot_parameters(
-    headers: HeaderMap,
-    Json(nodes): Json<Vec<String>>,
-) -> Json<Vec<BootParameters>> {
+async fn get_all_bss_boot_parameters(headers: HeaderMap) -> Response {
     // Configuration
     let settings = common::config::get_configuration().await.unwrap();
 
@@ -777,14 +798,60 @@ async fn get_bss_boot_parameters(
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let auth_token = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-    Json(
-        backend
-            .get_bootparameters(auth_token, &nodes)
-            .await
-            .unwrap(),
-    )
+    let boot_parameters_rslt = backend.get_all_bootparameters(auth_token).await;
+
+    match boot_parameters_rslt {
+        Ok(boot_parameters_vec) => {
+            return (StatusCode::OK, Json(boot_parameters_vec)).into_response();
+        }
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string())).into_response();
+        }
+    }
+}
+
+async fn get_bss_boot_parameters(
+    headers: HeaderMap,
+    // Json(nodes): Json<Vec<String>>,
+    Path(xname): Path<String>,
+) -> Json<Vec<BootParameters>> {
+    println!("DEBUG - TEST 1");
+    // Configuration
+    let settings = common::config::get_configuration().await.unwrap();
+
+    let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
+
+    let site_name: String = configuration.site;
+    let site_detail_value_opt = configuration.sites.get(&site_name);
+
+    let site = match site_detail_value_opt {
+        Some(site_detail_value) => site_detail_value,
+        None => {
+            eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+            std::process::exit(1);
+        }
+    };
+
+    let backend_tech = &site.backend;
+    let shasta_base_url = &site.shasta_base_url;
+
+    let root_ca_cert_file = &site.root_ca_cert_file;
+
+    let shasta_root_cert = common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+    // Backend
+    let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
+
+    // Get auth token
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap();
+
+    let boot_parameters_rslt = backend.get_bootparameters(auth_token, &[xname]).await;
+
+    Json(boot_parameters_rslt.unwrap())
 }
 
 async fn post_bss_boot_parameters(
@@ -818,7 +885,8 @@ async fn post_bss_boot_parameters(
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let auth_token = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap();
 
     backend
         .add_bootparameters(auth_token, &boot_parameters)
@@ -854,17 +922,18 @@ async fn get_all_groups(headers: HeaderMap) -> Json<serde_json::Value> {
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap();
 
     let hsm_group_available_name_vec = backend
-        .get_group_available(shasta_token)
+        .get_group_available(auth_token)
         .await
         .unwrap()
         .iter()
         .map(|hsm_group| hsm_group.label.clone())
         .collect::<Vec<String>>();
 
-    let response_rslt = backend.get_all_groups(&shasta_token).await;
+    let response_rslt = backend.get_all_groups(&auth_token).await;
 
     match response_rslt {
         Ok(mut response) => {
@@ -909,15 +978,15 @@ async fn get_group_details(
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = headers.get("authorization").unwrap().to_str().unwrap();
-    // let shasta_token = backend.get_api_token(&site_name).await.unwrap();
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-    let group = backend.get_group(&shasta_token, &group).await.unwrap();
+    let group = backend.get_group(&auth_token, &group).await.unwrap();
 
     let hsm_groups_node_list = group.get_members();
 
     let response = mesa::node::utils::get_node_details(
-        &shasta_token,
+        &auth_token,
         &shasta_base_url,
         &shasta_root_cert,
         hsm_groups_node_list,
@@ -928,7 +997,10 @@ async fn get_group_details(
     Json(serde_json::to_value(response).unwrap())
 }
 
-async fn get_hsm_hardware(Path(group): Path<String>) -> Json<serde_json::Value> {
+async fn get_hsm_hardware(
+    headers: HeaderMap,
+    Path(group): Path<String>,
+) -> Json<serde_json::Value> {
     // Configuration
     let settings = common::config::get_configuration().await.unwrap();
 
@@ -956,10 +1028,11 @@ async fn get_hsm_hardware(Path(group): Path<String>) -> Json<serde_json::Value> 
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = backend.get_api_token(&site_name).await.unwrap();
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap();
 
     let hsm_group = mesa::hsm::group::http_client::get(
-        &shasta_token,
+        &auth_token,
         &shasta_base_url,
         &shasta_root_cert,
         Some(&[&group]),
@@ -980,7 +1053,7 @@ async fn get_hsm_hardware(Path(group): Path<String>) -> Json<serde_json::Value> 
 
     // Get HW inventory details for target HSM group
     for hsm_member in hsm_group_target_members.clone() {
-        let shasta_token_string = shasta_token.to_string(); // TODO: make it static
+        let shasta_token_string = auth_token.to_string(); // TODO: make it static
         let shasta_base_url_string = shasta_base_url.to_string(); // TODO: make it static
         let shasta_root_cert_vec = shasta_root_cert.to_vec();
         let hsm_member_string = hsm_member.to_string(); // TODO: make it static
@@ -1045,9 +1118,10 @@ async fn power_off_node(Path(node): Path<String>, headers: HeaderMap) -> Result<
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-    let response_rslt = backend.power_off_sync(shasta_token, &[node], true).await;
+    let response_rslt = backend.power_off_sync(auth_token, &[node], true).await;
 
     match response_rslt {
         Ok(_) => Ok(()),
@@ -1056,7 +1130,7 @@ async fn power_off_node(Path(node): Path<String>, headers: HeaderMap) -> Result<
 }
 
 #[debug_handler]
-async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
+async fn power_on_node(headers: HeaderMap, Path(node): Path<String>) -> Result<(), StatusCode> {
     tracing::info!("Power ON node {}", node);
 
     // Configuration
@@ -1086,9 +1160,10 @@ async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-    let response_rslt = backend.power_on_sync(shasta_token, &[node]).await;
+    let response_rslt = backend.power_on_sync(auth_token, &[node]).await;
 
     match response_rslt {
         Ok(_) => Ok(()),
@@ -1096,7 +1171,7 @@ async fn power_on_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(
     }
 }
 
-async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Result<(), StatusCode> {
+async fn power_reset_node(headers: HeaderMap, Path(node): Path<String>) -> Result<(), StatusCode> {
     tracing::debug!("Power RESET node {}", node);
 
     // Configuration
@@ -1126,9 +1201,10 @@ async fn power_reset_node(Path(node): Path<String>, headers: HeaderMap) -> Resul
     let backend = StaticBackendDispatcher::new(&backend_tech, &shasta_base_url, &shasta_root_cert);
 
     // Get auth token
-    let shasta_token = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+    let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-    let response_rslt = backend.power_on_sync(shasta_token, &[node]).await;
+    let response_rslt = backend.power_on_sync(auth_token, &[node]).await;
 
     match response_rslt {
         Ok(_) => Ok(()),
@@ -1175,8 +1251,9 @@ async fn node_migration(
 
     let shasta_root_cert = get_csm_root_cert_content("alps");
 
-    let shasta_token = if let Some(usercredentials) = headers.get("authorization") {
-        usercredentials.to_str().unwrap().split(" ").nth(1).unwrap()
+    // Get auth token
+    let auth_token = if let Some(auth_header) = headers.get("authorization") {
+        auth_header.to_str().unwrap().split(" ").nth(1).unwrap()
     } else {
         return Err(StatusCode::UNAUTHORIZED);
     };
@@ -1187,7 +1264,7 @@ async fn node_migration(
         .collect::<Vec<&str>>();
 
     if mesa::hsm::group::http_client::get(
-        shasta_token,
+        auth_token,
         &shasta_base_url,
         &shasta_root_cert,
         Some(&[&target]),
@@ -1204,7 +1281,7 @@ async fn node_migration(
                 target.to_string()
             );
             mesa::hsm::group::http_client::create_new_group(
-                shasta_token,
+                auth_token,
                 &shasta_base_url,
                 &shasta_root_cert,
                 &target,
@@ -1225,7 +1302,7 @@ async fn node_migration(
     }
 
     let _ = mesa::hsm::group::utils::migrate_hsm_members(
-        shasta_token,
+        auth_token,
         &shasta_base_url,
         &shasta_root_cert,
         &target,

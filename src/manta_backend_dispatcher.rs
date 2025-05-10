@@ -493,6 +493,13 @@ impl PCSTrait for StaticBackendDispatcher {
 }
 
 impl BootParametersTrait for StaticBackendDispatcher {
+    async fn get_all_bootparameters(&self, auth_token: &str) -> Result<Vec<BootParameters>, Error> {
+        match self {
+            CSM(b) => b.get_all_bootparameters(auth_token).await,
+            OCHAMI(b) => b.get_all_bootparameters(auth_token).await,
+        }
+    }
+
     async fn get_bootparameters(
         &self,
         auth_token: &str,
