@@ -1,4 +1,11 @@
-## What's Changed in 0.1.7
+## What's Changed in v0.1.9
+* chore: Release manta-ws version 0.1.9 by @Masber
+* chore: Release manta-ws version 0.1.8 by @Masber
+* fix: handlers to return struct that implements IntoResponse by @Masber
+* chore: get/post boot parameters by @Masber
+* refactor: clean code by @Masber
+* refactor: clean code by @Masber
+* chore: update CHANGELOG.md for v0.1.7 by @actions-user
 * chore: improve the docker image creation by @Masber in [#19](https://github.com/eth-cscs/manta-ws/pull/19)
 * chore(docker): add again jobs flag by @t-h2o
 * feat(rust): add optimizations for building release
@@ -17,7 +24,7 @@
 * @actions-user made their first contribution
 * @t-h2o made their first contribution
 
-**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.7...0.1.7
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.7...v0.1.9
 
 ## What's Changed in v0.1.7
 * chore: Release manta-ws version 0.1.7 by @Masber
