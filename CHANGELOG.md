@@ -1,3 +1,11 @@
+## What's Changed in v0.1.11
+* chore: Release manta-ws version 0.1.11 by @Masber
+* chore: Release manta-ws version 0.1.10 by @Masber
+* feat: add endpoints for BSS to create and get entities by @Masber
+* chore: update CHANGELOG.md for v0.1.9 by @actions-user
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.9...v0.1.11
+
 ## What's Changed in v0.1.9
 * chore: Release manta-ws version 0.1.9 by @Masber
 * chore: Release manta-ws version 0.1.8 by @Masber
