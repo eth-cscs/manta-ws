@@ -8,7 +8,6 @@ mod manta_backend_dispatcher;
 
 use ::manta_backend_dispatcher::{
     contracts::BackendTrait,
-    error::Error,
     interfaces::{bss::BootParametersTrait, cfs::CfsTrait, hsm::group::GroupTrait, pcs::PCSTrait},
     types::{BootParameters, K8sAuth, K8sDetails},
 };
@@ -749,8 +748,8 @@ async fn get_bos_health_check() -> Result<Json<serde_json::Value>, StatusCode> {
 #[axum::debug_handler]
 async fn get_bss_boot_parameters(
     headers: HeaderMap,
-    Json(nodes): Json<&[String]>,
-) -> Result<Vec<BootParameters>, Error> {
+    Json(nodes): Json<Vec<String>>,
+) -> Json<Vec<BootParameters>> {
     // Configuration
     let settings = common::config::get_configuration().await.unwrap();
 
@@ -780,13 +779,18 @@ async fn get_bss_boot_parameters(
     // Get auth token
     let auth_token = headers.get("authorization").unwrap().to_str().unwrap();
 
-    backend.get_bootparameters(auth_token, nodes).await
+    Json(
+        backend
+            .get_bootparameters(auth_token, &nodes)
+            .await
+            .unwrap(),
+    )
 }
 
 async fn post_bss_boot_parameters(
     headers: HeaderMap,
     Json(boot_parameters): Json<BootParameters>,
-) -> Result<(), Error> {
+) -> () {
     // Configuration
     let settings = common::config::get_configuration().await.unwrap();
 
@@ -819,6 +823,7 @@ async fn post_bss_boot_parameters(
     backend
         .add_bootparameters(auth_token, &boot_parameters)
         .await
+        .unwrap()
 }
 
 async fn get_all_groups(headers: HeaderMap) -> Json<serde_json::Value> {
