@@ -1,3 +1,10 @@
+## What's Changed in v0.1.12
+* chore: Release manta-ws version 0.1.12 by @Masber
+* feat: add new functionality to delete boot parameters by @Masber
+* chore: update CHANGELOG.md for v0.1.11 by @actions-user
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.11...v0.1.12
+
 ## What's Changed in v0.1.11
 * chore: Release manta-ws version 0.1.11 by @Masber
 * chore: Release manta-ws version 0.1.10 by @Masber
