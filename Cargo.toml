@@ -1,9 +1,51 @@
 [package]
 name = "manta-ws"
 description = "HTTP server for Mesa"
-version = "0.1.12"
+version = "0.1.7"
 edition = "2024"
 publish = false
+
+
+[dependencies]
+manta-backend-dispatcher = { workspace = true }
+ochami-rs = { workspace = true }
+mesa = { workspace = true }
+
+anyhow = { version = "1.0.98", default-features = false }
+axum-extra = { version = "0.10.1", features = ["typed-header"] }
+axum = { version = "0.8.3", features = ["ws", "macros"] }
+#base64 = "0.22.1"
+base64 = { workspace = true }
+bytes = "1.10.1"
+chrono = { workspace = true }
+config = { version = "0.15.11", features = ["toml"] } # used to read manta configuration file
+#directories = "6.0.0" # XDG Base Directory Specification
+directories = { workspace = true } # XDG Base Directory Specification
+futures-util = { version = "0.3.31", default-features = false, features = ["sink", "std"] }
+futures = { version = "0.3.31", default-features = false }
+#hyper = { version = "1.6.0" }
+hyper = { workspace = true }
+jsonwebtoken = "9.3.1"
+rdkafka = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true } # TODO: deprecated, need to replace, potential candiate: yaml-rust2
+#tokio-util = "0.7.5"
+tokio-util = { workspace = true }
+#tokio = { version = "1.44.2", features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+#tower = "0.5.2"
+tower = { workspace = true }
+tower-http = { version = "0.6.2", features = ["fs", "trace", "cors"] }
+#tracing = "0.1.41"
+tracing = { workspace = true }
+#tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+#utoipa = { version = "5.3.1" }
+utoipa = { workspace = true }
+
+[profile.dev]
+incremental = true
 
 [profile.release]
 opt-level = 'z'     # Optimize for size
@@ -11,47 +53,3 @@ lto = true          # Enable link-time optimization
 codegen-units = 1   # Reduce number of codegen units to increase optimizations
 panic = 'abort'     # Abort on panic
 strip = true        # Strip symbols from binary*
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-# mesa = { path = "../mesa" } # Only for development purposes
-
-# PROD
-
-manta-backend-dispatcher = "0.1.71"
-ochami-rs = "0.1.73"
-mesa = "0.5.0-beta.4"
-
-# DEV
-
-# manta-backend-dispatcher = { path = "../manta-backend-dispatcher" } # Only for development purposes
-# ochami-rs = { path = "../ochami-rs" } # Only for development purposes
-# mesa = { path = "../mesa" } # Only for development purposes
-
-anyhow = { version = "1.0.98", default-features = false }
-directories = "6.0.0" # XDG Base Directory Specification
-config = { version = "0.15.11", features = ["toml"] } # used to read manta configuration file
-axum = { version = "0.8.3", features = ["ws", "macros"] }
-axum-extra = { version = "0.10.1", features = ["typed-header"] }
-jsonwebtoken = "9.3.1"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-serde_yaml = "0.9.17" # TODO: deprecated, need to replace, potential candiate: yaml-rust2
-tokio-util = "0.7.5"
-tokio = { version = "1.44.2", features = ["rt-multi-thread"] }
-bytes = "1.10.1"
-hyper = { version = "1.6.0" }
-tower = "0.5.2"
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-base64 = "0.22.1"
-tower-http = { version = "0.6.2", features = ["fs", "trace", "cors"] }
-futures = { version = "0.3.31", default-features = false }
-futures-util = { version = "0.3.31", default-features = false, features = ["sink", "std"] }
-chrono = "0.4.41"
-rdkafka = { version = "0.37", features = ["cmake-build"] }
-utoipa = { version = "5.3.1" }
-
-[profile.dev]
-incremental = true
