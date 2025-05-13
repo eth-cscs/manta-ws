@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use std::collections::HashMap;
 
-use mesa::bss::{
+use csm_rs::bss::{
   http_client::get as boot_parameters_get, types::BootParameters,
 };
 
