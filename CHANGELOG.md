@@ -1,3 +1,11 @@
+## What's Changed in v0.1.13
+* chore: Release manta-ws version 0.1.13 by @Masber
+* fix: update function to create a redfish endpoint to accept same struct as the backend dispatcher by @Masber
+* feat: add endpoints related to redfish endpoints by @Masber
+* chore: update CHANGELOG.md for v0.1.12 by @actions-user
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.12...v0.1.13
+
 ## What's Changed in v0.1.12
 * chore: Release manta-ws version 0.1.12 by @Masber
 * feat: add new functionality to delete boot parameters by @Masber
