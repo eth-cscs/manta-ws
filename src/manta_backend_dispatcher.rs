@@ -46,7 +46,7 @@ use manta_backend_dispatcher::{
 use StaticBackendDispatcher::*;
 use futures::AsyncBufRead;
 
-use mesa::backend_connector::Csm;
+use csm_rs::backend_connector::Csm;
 use ochami_rs::backend_connector::Ochami;
 use serde_json::Value;
 
@@ -634,6 +634,16 @@ impl RedfishEndpointTrait for StaticBackendDispatcher {
         )
         .await
       }
+    }
+  }
+
+  async fn get_all_redfish_endpoints(
+    &self,
+    auth_token: &str,
+  ) -> Result<RedfishEndpointArray, Error> {
+    match self {
+      CSM(b) => b.get_all_redfish_endpoints(auth_token).await,
+      OCHAMI(b) => b.get_all_redfish_endpoints(auth_token).await,
     }
   }
 

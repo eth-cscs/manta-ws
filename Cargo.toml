@@ -15,13 +15,13 @@ strip = true        # Strip symbols from binary*
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# mesa = { path = "../mesa" } # Only for development purposes
+#csm-rs = { path = "../csm-rs" } # Only for development purposes
 
 # PROD
 
 manta-backend-dispatcher = "0.1.71"
 ochami-rs = "0.1.73"
-mesa = "0.5.0-beta.4"
+csm-rs = "0.5.0-beta.5"
 
 # DEV
 

@@ -28,12 +28,12 @@ use axum_extra::{TypedHeader, headers};
 use bytes::Bytes;
 use common::config::types::MantaConfiguration;
 use config::Config;
-use directories::ProjectDirs;
-use futures::{AsyncBufReadExt, SinkExt, StreamExt, TryStreamExt};
-use mesa::{
+use csm_rs::{
   common::vault::http_client::fetch_shasta_k8s_secrets_from_vault,
   hsm::hw_inventory::hw_component::types::NodeSummary,
 };
+use directories::ProjectDirs;
+use futures::{AsyncBufReadExt, SinkExt, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -537,7 +537,7 @@ async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
   let password = user_credentials.next().unwrap();
 
   let auth_token_result =
-    mesa::common::authentication::get_token_from_shasta_endpoint(
+    csm_rs::common::authentication::get_token_from_shasta_endpoint(
       &keycloak_base_url,
       &shasta_root_cert,
       username,
@@ -646,7 +646,7 @@ async fn handle_socket(headers: HeaderMap, socket: WebSocket, xname: String) {
 
   // CONSOLE
 
-  let mut attached = mesa::node::console::get_container_attachment_to_conman(
+  let mut attached = csm_rs::node::console::get_container_attachment_to_conman(
     &xname.to_string(),
     &k8s_details.api_url,
     shasta_k8s_secrets,
@@ -784,7 +784,7 @@ async fn get_service_health(
     // should do proper error handling by making mesa to return the right error code,
     // then create the right HTTP status code based on it
     "cfs" => {
-      mesa::cfs::common::health_check(
+      csm_rs::cfs::common::health_check(
         &auth_token,
         &shasta_base_url,
         &shasta_root_cert,
@@ -792,7 +792,7 @@ async fn get_service_health(
       .await?
     }
     "bos" => {
-      mesa::bos::health_check::get(
+      csm_rs::bos::health_check::get(
         &auth_token,
         &shasta_base_url,
         &shasta_root_cert,
@@ -1120,7 +1120,7 @@ async fn get_group_details(
 
   let hsm_groups_node_list = group.get_members();
 
-  let response = mesa::node::utils::get_node_details(
+  let response = csm_rs::node::utils::get_node_details(
     &auth_token,
     &shasta_base_url,
     &shasta_root_cert,
@@ -1171,7 +1171,7 @@ async fn get_hsm_hardware(
   let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
   let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-  let hsm_group = mesa::hsm::group::http_client::get(
+  let hsm_group = csm_rs::hsm::group::http_client::get(
     &auth_token,
     &shasta_base_url,
     &shasta_root_cert,
@@ -1182,7 +1182,7 @@ async fn get_hsm_hardware(
   .unwrap();
 
   let hsm_group_target_members =
-    mesa::hsm::group::utils::get_member_vec_from_hsm_group(
+    csm_rs::hsm::group::utils::get_member_vec_from_hsm_group(
       &hsm_group.first().unwrap(),
     );
 
@@ -1206,7 +1206,7 @@ async fn get_hsm_hardware(
 
     tasks.spawn(async move {
       let _permit = permit; // Wait semaphore to allow new tasks https://github.com/tokio-rs/tokio/discussions/2648#discussioncomment-34885
-      mesa::hsm::hw_inventory::hw_component::http_client::get(
+      csm_rs::hsm::hw_inventory::hw_component::http_client::get(
         &shasta_token_string,
         &shasta_base_url_string,
         &shasta_root_cert_vec,
@@ -1429,7 +1429,7 @@ async fn node_migration(
     .map(|xname| xname.trim())
     .collect::<Vec<&str>>();
 
-  if mesa::hsm::group::http_client::get(
+  if csm_rs::hsm::group::http_client::get(
     auth_token,
     &shasta_base_url,
     &shasta_root_cert,
@@ -1446,7 +1446,7 @@ async fn node_migration(
         "HSM group {} does not exist, but the option to create the group has been selected, creating it now.",
         target.to_string()
       );
-      mesa::hsm::group::http_client::create_new_group(
+      csm_rs::hsm::group::http_client::create_new_group(
         auth_token,
         &shasta_base_url,
         &shasta_root_cert,
@@ -1467,7 +1467,7 @@ async fn node_migration(
     }
   }
 
-  let _ = mesa::hsm::group::utils::migrate_hsm_members(
+  let _ = csm_rs::hsm::group::utils::migrate_hsm_members(
     auth_token,
     &shasta_base_url,
     &shasta_root_cert,
