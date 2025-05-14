@@ -10,7 +10,7 @@ use axum::{
 use hyper::{HeaderMap, StatusCode};
 use manta_backend_dispatcher::{
   interfaces::hsm::redfish_endpoint::RedfishEndpointTrait,
-  types::hsm::inventory::RedfishEndpoint,
+  types::hsm::inventory::{RedfishEndpoint, RedfishEndpointArray},
 };
 
 pub async fn get_all_redfish(headers: HeaderMap) -> Response {
@@ -130,7 +130,7 @@ pub async fn get_redfish(
 #[axum::debug_handler]
 pub async fn post_redfish(
   headers: HeaderMap,
-  Json(redfish_endpoint): Json<RedfishEndpoint>,
+  Json(redfish_endpoint): Json<RedfishEndpointArray>,
 ) -> Response {
   // Configuration
   let settings = common::config::get_configuration().await.unwrap();

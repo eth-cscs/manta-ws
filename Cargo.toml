@@ -19,15 +19,15 @@ strip = true        # Strip symbols from binary*
 
 # PROD
 
-# manta-backend-dispatcher = "0.1.73"
-# ochami-rs = "0.1.73"
-# csm-rs = "0.5.0-beta.5"
+manta-backend-dispatcher = "0.1.77"
+ochami-rs = "0.1.77"
+csm-rs = "0.5.0-beta.7"
 
 # DEV
 
-manta-backend-dispatcher = { path = "../manta-backend-dispatcher" } # Only for development purposes
-ochami-rs = { path = "../ochami-rs" } # Only for development purposes
-csm-rs = { path = "../csm-rs" } # Only for development purposes
+# manta-backend-dispatcher = { path = "../manta-backend-dispatcher" } # Only for development purposes
+# ochami-rs = { path = "../ochami-rs" } # Only for development purposes
+# csm-rs = { path = "../csm-rs" } # Only for development purposes
 
 anyhow = { version = "1.0.98", default-features = false }
 directories = "6.0.0" # XDG Base Directory Specification
