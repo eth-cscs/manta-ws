@@ -637,6 +637,16 @@ impl RedfishEndpointTrait for StaticBackendDispatcher {
     }
   }
 
+  async fn get_all_redfish_endpoints(
+    &self,
+    auth_token: &str,
+  ) -> Result<RedfishEndpointArray, Error> {
+    match self {
+      CSM(b) => b.get_all_redfish_endpoints(auth_token).await,
+      OCHAMI(b) => b.get_all_redfish_endpoints(auth_token).await,
+    }
+  }
+
   async fn add_redfish_endpoint(
     &self,
     auth_token: &str,
