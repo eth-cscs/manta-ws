@@ -46,7 +46,7 @@ use manta_backend_dispatcher::{
 use StaticBackendDispatcher::*;
 use futures::AsyncBufRead;
 
-use mesa::backend_connector::Csm;
+use csm_rs::backend_connector::Csm;
 use ochami_rs::backend_connector::Ochami;
 use serde_json::Value;
 
