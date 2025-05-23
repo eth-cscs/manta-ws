@@ -38,6 +38,9 @@ use manta_backend_dispatcher::{
       cfs_configuration_response::{CfsConfigurationResponse, Layer},
       session::{CfsSessionGetResponse, CfsSessionPostRequest},
     },
+    pcs::{
+        power_status::types::PowerStatusAll as FrontEndPowerStatusAll
+    },
     hsm::inventory::{RedfishEndpoint, RedfishEndpointArray},
     ims::Image,
   },
@@ -535,6 +538,20 @@ impl PCSTrait for StaticBackendDispatcher {
     match self {
       CSM(b) => b.power_reset_sync(auth_token, nodes, force).await,
       OCHAMI(b) => b.power_reset_sync(auth_token, nodes, force).await,
+    }
+  }
+
+  async fn power_status(
+    &self,
+    auth_token: &str,
+    nodes: &[String],
+    power_status_filter: Option<&str>,
+    management_state_filter: Option<&str>,
+
+  ) -> Result<FrontEndPowerStatusAll, Error> {
+    match self {
+      CSM(b) => b.power_status(auth_token, nodes, power_status_filter, management_state_filter).await,
+      OCHAMI(b) => b.power_status(auth_token, nodes, power_status_filter, management_state_filter).await,
     }
   }
 }

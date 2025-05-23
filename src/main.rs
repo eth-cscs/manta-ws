@@ -126,6 +126,7 @@ async fn main() {
     .route("/node/{node}/power-off", get(power_off_node))
     .route("/node/{node}/power-on", get(power_on_node))
     .route("/node/{node}/power-reset", get(power_reset_node))
+    .route("/node/{node}/power-status", get(power_status_node))
     .route(
       "/node-migration/target/{target}/parent/{parent}",
       put(node_migration),
@@ -1381,6 +1382,77 @@ async fn power_reset_node(
 
   match response_rslt {
     Ok(_) => Ok(()),
+    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+  }
+}
+
+// TODO: these need to be imported from csm-rs and ochami-rs ? or dispatcher ?
+#[derive(Deserialize, Debug)]
+pub struct PowerStatusQueryParams {
+  power_state_filter: Option<String>,
+  management_state_filter: Option<String>,
+}
+
+async fn power_status_node(
+  headers: HeaderMap,
+  Path(node): Path<String>,
+  Query(query_param): Query<PowerStatusQueryParams>,
+) -> Result<impl IntoResponse, impl IntoResponse> {
+  tracing::debug!("Power STATUS node {}", node);
+
+  // Configuration
+  let settings = common::config::get_configuration().await.unwrap();
+
+  let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
+
+  let site_name: String = configuration.site;
+  let site_detail_value_opt = configuration.sites.get(&site_name);
+
+  let site = match site_detail_value_opt {
+    Some(site_detail_value) => site_detail_value,
+    None => {
+      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      std::process::exit(1);
+    }
+  };
+
+  let backend_tech = &site.backend;
+  let shasta_base_url = &site.shasta_base_url;
+
+  let root_ca_cert_file = &site.root_ca_cert_file;
+
+  let shasta_root_cert =
+    common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+  // Backend
+  let backend = StaticBackendDispatcher::new(
+    &backend_tech,
+    &shasta_base_url,
+    &shasta_root_cert,
+  );
+
+  // Get auth token
+  let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+  let auth_token = auth_header.split(" ").nth(1).unwrap();
+
+  println!("shasta_base_url: {}", shasta_base_url);
+  println!("node: {}", node);
+  println!("auth_token: {}", auth_token);
+  println!("query param: {:?}", query_param);
+  println!("query power_state_filter: {:?}", query_param.power_state_filter.as_deref());
+  println!("query management_state_filter: {:?}", query_param.management_state_filter.as_deref());
+
+  let response = backend.power_status(
+      auth_token,
+      &[node],
+      query_param.power_state_filter.as_deref(), // Convert Option<String> to Option<&str>
+      query_param.management_state_filter.as_deref(), // Convert Option<String> to Option<&str>
+      //power_state_filter,
+      //management_state_filter
+    ).await;
+
+  match response {
+    Ok(response) => Ok(Json(response)),
     Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
   }
 }
