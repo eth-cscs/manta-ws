@@ -1,3 +1,14 @@
+## What's Changed in v0.1.14
+* chore: Release manta-ws version 0.1.14 by @Masber
+* chore: update Cargo.toml by @Masber
+* Feature/power status by @Masber in [#24](https://github.com/eth-cscs/manta-ws/pull/24)
+* fix: change keyworkd "ref" -> "branch" in Cargo.toml by @aescoubas
+* fix: reference projects git repositories by @aescoubas
+* feat: power-status by @aescoubas
+* chore: update CHANGELOG.md for v0.1.13 by @actions-user
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.13...v0.1.14
+
 ## What's Changed in v0.1.13
 * chore: Release manta-ws version 0.1.13 by @Masber
 * fix: update function to create a redfish endpoint to accept same struct as the backend dispatcher by @Masber
