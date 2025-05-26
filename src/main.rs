@@ -1435,21 +1435,16 @@ async fn power_status_node(
   let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
   let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-  println!("shasta_base_url: {}", shasta_base_url);
-  println!("node: {}", node);
-  println!("auth_token: {}", auth_token);
-  println!("query param: {:?}", query_param);
-  println!("query power_state_filter: {:?}", query_param.power_state_filter.as_deref());
-  println!("query management_state_filter: {:?}", query_param.management_state_filter.as_deref());
-
-  let response = backend.power_status(
+  let response = backend
+    .power_status(
       auth_token,
       &[node],
       query_param.power_state_filter.as_deref(), // Convert Option<String> to Option<&str>
       query_param.management_state_filter.as_deref(), // Convert Option<String> to Option<&str>
-      //power_state_filter,
-      //management_state_filter
-    ).await;
+                                                      //power_state_filter,
+                                                      //management_state_filter
+    )
+    .await;
 
   match response {
     Ok(response) => Ok(Json(response)),
