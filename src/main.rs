@@ -1,6 +1,7 @@
 mod backend_api;
 mod commands;
 mod common;
+mod error;
 mod handlers;
 mod http_response;
 mod jwt_utils;
