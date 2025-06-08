@@ -25,8 +25,10 @@ pub async fn get_all_redfish(headers: HeaderMap) -> Response {
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+      return (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        format!("ERROR - Site '{}' not found in configuration", site_name),
+      )
         .into_response();
     }
   };
