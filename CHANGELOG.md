@@ -1,3 +1,16 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## What's Changed in v0.1.15
+* chore: Release manta-ws version 0.1.15 by @Masber
+* refactor: We did not really have a valid way to return errors in manta-ws, this fix tries to improve the situation by returning the error from the http client that talks to the backend by @Masber
+* fix: fix bug by @Masber
+* refactor: in order to simplify the files in the project, we will reduce the number of files related to the redfish functionality from 2 to 1 by @Masber
+* chore: update CHANGELOG.md for v0.1.14 by @actions-user
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.14...v0.1.15
+
 ## What's Changed in v0.1.14
 * chore: Release manta-ws version 0.1.14 by @Masber
 * chore: update Cargo.toml by @Masber
