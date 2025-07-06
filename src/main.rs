@@ -61,9 +61,7 @@ use crate::handlers::*;
 
 use manta_backend_dispatcher::StaticBackendDispatcher;
 
-use commands::redfish::{
-  delete_redfish, get_all_redfish, get_redfish, post_redfish,
-};
+use commands::{delete_redfish, get_all_redfish, get_redfish, post_redfish};
 use utoipa::{OpenApi, ToSchema, openapi::OpenApi as OpenApiDoc};
 
 #[derive(OpenApi)]
@@ -611,20 +609,20 @@ async fn handle_socket(headers: HeaderMap, socket: WebSocket, xname: String) {
     .as_ref()
     .expect("ERROR - k8s section not found in configuration");
 
-  let backend_tech = &site.backend;
-  let shasta_base_url = &site.shasta_base_url;
+  // let backend_tech = &site.backend;
+  // let shasta_base_url = &site.shasta_base_url;
 
-  let root_ca_cert_file = &site.root_ca_cert_file;
+  // let root_ca_cert_file = &site.root_ca_cert_file;
 
-  let shasta_root_cert =
-    common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+  /* let shasta_root_cert =
+  common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap(); */
 
   // Backend
-  let backend = StaticBackendDispatcher::new(
+  /* let backend = StaticBackendDispatcher::new(
     &backend_tech,
     &shasta_base_url,
     &shasta_root_cert,
-  );
+  ); */
 
   // Get auth token
   let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
@@ -814,30 +812,28 @@ async fn get_service_health(
   Ok(Json(response))
 }
 
-async fn get_cfs_health_check(
-  headers: HeaderMap,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-  let response = get_service_health(headers, "cfs")
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-  // NOTE: sending always 500 error is a BAD practice, we
-  // should do proper error handling by making mesa to return the right error code,
-  // then create the right HTTP status code based on it
+async fn get_cfs_health_check(headers: HeaderMap) -> Response {
+  let response_rslt = get_service_health(headers, "cfs").await;
 
-  Ok(response)
+  match response_rslt {
+    Ok(response) => return response.into_response(),
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
+  }
 }
 
-async fn get_bos_health_check(
-  headers: HeaderMap,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-  let response = get_service_health(headers, "bos")
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-  // NOTE: sending always 500 error is a BAD practice, we
-  // should do proper error handling by making mesa to return the right error code,
-  // then create the right HTTP status code based on it
+async fn get_bos_health_check(headers: HeaderMap) -> Response {
+  let response_rslt = get_service_health(headers, "bos").await;
 
-  Ok(response)
+  match response_rslt {
+    Ok(response) => return response.into_response(),
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
+  }
 }
 
 async fn get_all_bss_boot_parameters(headers: HeaderMap) -> Response {
@@ -891,10 +887,8 @@ async fn get_all_bss_boot_parameters(headers: HeaderMap) -> Response {
 
 async fn get_bss_boot_parameters(
   headers: HeaderMap,
-  // Json(nodes): Json<Vec<String>>,
   Path(xname): Path<String>,
-) -> Json<Vec<BootParameters>> {
-  println!("DEBUG - TEST 1");
+) -> Response {
   // Configuration
   let settings = common::config::get_configuration().await.unwrap();
 
@@ -933,13 +927,19 @@ async fn get_bss_boot_parameters(
   let boot_parameters_rslt =
     backend.get_bootparameters(auth_token, &[xname]).await;
 
-  Json(boot_parameters_rslt.unwrap())
+  match boot_parameters_rslt {
+    Ok(response) => return (StatusCode::OK, Json(response)).into_response(),
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
+  }
 }
 
 async fn post_bss_boot_parameters(
   headers: HeaderMap,
   Json(boot_parameters): Json<BootParameters>,
-) -> () {
+) -> Response {
   // Configuration
   let settings = common::config::get_configuration().await.unwrap();
 
@@ -975,16 +975,23 @@ async fn post_bss_boot_parameters(
   let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
   let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-  backend
+  let bss_boot_parameters_rslt = backend
     .add_bootparameters(auth_token, &boot_parameters)
-    .await
-    .unwrap()
+    .await;
+
+  match bss_boot_parameters_rslt {
+    Ok(response) => return (StatusCode::OK, Json(response)).into_response(),
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
+  }
 }
 
 async fn delete_bss_boot_parameters(
   headers: HeaderMap,
   Json(boot_parameters): Json<BootParameters>,
-) -> () {
+) -> Response {
   // Configuration
   let settings = common::config::get_configuration().await.unwrap();
 
@@ -1020,13 +1027,20 @@ async fn delete_bss_boot_parameters(
   let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
   let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-  backend
+  let bss_boot_parameters_rslt = backend
     .delete_bootparameters(auth_token, &boot_parameters)
-    .await
-    .unwrap();
+    .await;
+
+  match bss_boot_parameters_rslt {
+    Ok(response) => return (StatusCode::OK, Json(response)).into_response(),
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
+  }
 }
 
-async fn get_all_groups(headers: HeaderMap) -> Json<serde_json::Value> {
+async fn get_all_groups(headers: HeaderMap) -> Response {
   // Configuration
   let settings = common::config::get_configuration().await.unwrap();
 
@@ -1074,14 +1088,17 @@ async fn get_all_groups(headers: HeaderMap) -> Json<serde_json::Value> {
 
   match response_rslt {
     Ok(mut response) => {
+      // Filter out groups that are not available
       response.retain(|hsm_group| {
         hsm_group_available_name_vec.contains(&hsm_group.label)
       });
-      Json(serde_json::to_value(response).unwrap())
+
+      // Convert response to JSON
+      return (StatusCode::OK, Json(response)).into_response();
     }
     Err(e) => {
-      eprintln!("{}", e);
-      std::process::exit(1);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
     }
   }
 }
@@ -1089,7 +1106,7 @@ async fn get_all_groups(headers: HeaderMap) -> Json<serde_json::Value> {
 async fn get_group_details(
   Path(group): Path<String>,
   headers: HeaderMap,
-) -> Json<serde_json::Value> {
+) -> Response {
   // Configuration
   let settings = common::config::get_configuration().await.unwrap();
 
@@ -1129,22 +1146,29 @@ async fn get_group_details(
 
   let hsm_groups_node_list = group.get_members();
 
-  let response = csm_rs::node::utils::get_node_details(
+  let response_rslt = csm_rs::node::utils::get_node_details(
     &auth_token,
     &shasta_base_url,
     &shasta_root_cert,
     hsm_groups_node_list,
   )
-  .await
-  .expect("ERROR - Unable to get node details");
+  .await;
 
-  Json(serde_json::to_value(response).unwrap())
+  match response_rslt {
+    Ok(response) => {
+      return (StatusCode::OK, Json(response)).into_response();
+    }
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
+  }
 }
 
 async fn get_hsm_hardware(
   headers: HeaderMap,
   Path(group): Path<String>,
-) -> Json<serde_json::Value> {
+) -> Response {
   // Configuration
   let settings = common::config::get_configuration().await.unwrap();
 
@@ -1226,23 +1250,28 @@ async fn get_hsm_hardware(
     });
   }
 
-  while let Some(message) = tasks.join_next().await {
-    if let Ok(node_summary) = message {
-      hsm_summary.push(node_summary);
-    } else {
-      tracing::error!("Failed procesing/fetching node hw information");
+  while let Some(message_rslt) = tasks.join_next().await {
+    match message_rslt {
+      Ok(node_summary) => {
+        hsm_summary.push(node_summary);
+      }
+      Err(e) => {
+        tracing::error!("Failed procesing/fetching node hw information");
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+          .into_response();
+      }
     }
   }
 
-  println!("DEBUG - result:\n{:?}", hsm_summary);
+  tracing::debug!("DEBUG - result:\n{:?}", hsm_summary);
 
-  Json(serde_json::to_value(hsm_summary).unwrap())
+  return (StatusCode::OK, Json(hsm_summary)).into_response();
 }
 
 async fn power_off_node(
   Path(node): Path<String>,
   headers: HeaderMap,
-) -> Result<(), StatusCode> {
+) -> Response {
   tracing::info!("Power OFF node {}", node);
 
   // Configuration
@@ -1283,8 +1312,11 @@ async fn power_off_node(
   let response_rslt = backend.power_off_sync(auth_token, &[node], true).await;
 
   match response_rslt {
-    Ok(_) => Ok(()),
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Ok(_) => return (StatusCode::OK, ()).into_response(),
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
   }
 }
 
@@ -1292,7 +1324,7 @@ async fn power_off_node(
 async fn power_on_node(
   headers: HeaderMap,
   Path(node): Path<String>,
-) -> Result<(), StatusCode> {
+) -> Response {
   tracing::info!("Power ON node {}", node);
 
   // Configuration
@@ -1333,15 +1365,18 @@ async fn power_on_node(
   let response_rslt = backend.power_on_sync(auth_token, &[node]).await;
 
   match response_rslt {
-    Ok(_) => Ok(()),
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Ok(_) => return (StatusCode::OK, ()).into_response(),
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
   }
 }
 
 async fn power_reset_node(
   headers: HeaderMap,
   Path(node): Path<String>,
-) -> Result<(), StatusCode> {
+) -> Response {
   tracing::debug!("Power RESET node {}", node);
 
   // Configuration
@@ -1382,8 +1417,11 @@ async fn power_reset_node(
   let response_rslt = backend.power_on_sync(auth_token, &[node]).await;
 
   match response_rslt {
-    Ok(_) => Ok(()),
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Ok(_) => return (StatusCode::OK, ()).into_response(),
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
   }
 }
 
@@ -1463,7 +1501,7 @@ async fn node_migration(
   Path((target, parent)): Path<(String, String)>,
   Query(query_param): Query<NodeMigrationQueryParams>,
   headers: HeaderMap,
-) -> Result<(), StatusCode> {
+) -> Response {
   tracing::info!(
     "Migrate nodes '{}' from parent '{}' to target {}. Create HSM group if doesn't exists? {}",
     query_param.ids,
@@ -1496,7 +1534,7 @@ async fn node_migration(
   let auth_token = if let Some(auth_header) = headers.get("authorization") {
     auth_header.to_str().unwrap().split(" ").nth(1).unwrap()
   } else {
-    return Err(StatusCode::UNAUTHORIZED);
+    return (StatusCode::UNAUTHORIZED).into_response();
   };
 
   let new_target_hsm_members = ids
@@ -1538,7 +1576,7 @@ async fn node_migration(
         "HSM group {} does not exist, but the option to create the group was NOT specificied, cannot continue.",
         target.to_string()
       );
-      return Err(StatusCode::UNPROCESSABLE_ENTITY);
+      return (StatusCode::UNPROCESSABLE_ENTITY).into_response();
     }
   }
 
@@ -1553,5 +1591,5 @@ async fn node_migration(
   )
   .await;
 
-  Ok(())
+  return ().into_response();
 }
