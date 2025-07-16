@@ -3,7 +3,7 @@ FROM rust:1.86.0-slim-bookworm AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends cmake
 WORKDIR /usr/src/manta-ws
 COPY . .
-RUN cargo build --release --jobs $(nproc)
+RUN cargo build --locked --release 
 
 FROM debian:bookworm-slim
 COPY --from=builder /usr/src/manta-ws/target/release/manta-ws /usr/local/bin/manta-ws
