@@ -1,6 +1,19 @@
-# Changelog
+## What's Changed in v0.1.17
+* chore: Release manta-ws version 0.1.17 by @Masber
+* fix: compilation issues by @Masber
+* chore: Release manta-ws version 0.1.16 by @Masber in [#31](https://github.com/eth-cscs/manta-ws/pull/31)
 
-All notable changes to this project will be documented in this file.
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.16...v0.1.17
+
+## What's Changed in v0.1.16
+* chore: Release manta-ws version 0.1.16 by @t-h2o
+* chore: use ochami-rs version 0.6.4 by @t-h2o
+* chore(docker): add needed package by @Masber in [#23](https://github.com/eth-cscs/manta-ws/pull/23)
+* chore(docker): install needed packages by @t-h2o
+* chore(docker): reduce the size copy in container by @t-h2o
+* chore: update CHANGELOG.md for v0.1.15 by @actions-user
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.15...v0.1.16
 
 ## What's Changed in v0.1.15
 * chore: Release manta-ws version 0.1.15 by @Masber
