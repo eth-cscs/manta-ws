@@ -13,7 +13,7 @@ use ::manta_backend_dispatcher::{
     bss::BootParametersTrait, cfs::CfsTrait, hsm::group::GroupTrait,
     pcs::PCSTrait,
   },
-  types::{BootParameters, K8sAuth, K8sDetails},
+  types::{K8sAuth, K8sDetails, bss::BootParameters},
 };
 use axum::{
   Json, Router, debug_handler,
@@ -336,12 +336,13 @@ async fn get_cfs_session(
       &auth_token,
       shasta_base_url,
       &shasta_root_cert,
-      Some(hsm_group_available_vec),
-      None,
+      hsm_group_available_vec,
+      Vec::new(),
       None,
       None,
       None,
       Some(&cfs_session_name),
+      None,
       None,
       None,
     )
@@ -436,6 +437,7 @@ async fn get_cfs_session_logs(
       &shasta_token,
       &site_name,
       &cfs_session_name,
+      false,
       &k8s_details,
     )
     .await
@@ -1586,7 +1588,7 @@ async fn node_migration(
     &shasta_root_cert,
     &target,
     &parent,
-    new_target_hsm_members,
+    &new_target_hsm_members,
     true,
   )
   .await;

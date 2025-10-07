@@ -10,7 +10,7 @@ use std::{collections::HashMap, path::PathBuf, pin::Pin};
 /// # Implement new functionalities to BackendTrait implementation
 /// NOTE: we assume functionalities are already added to the BackendTrait in 'backend' crate
 use manta_backend_dispatcher::{
-  contracts::BackendTrait,
+  // contracts::BackendTrait,
   error::Error,
   interfaces::{
     apply_hw_cluster_pin::ApplyHwClusterPin,
@@ -29,26 +29,26 @@ use manta_backend_dispatcher::{
     pcs::PCSTrait,
   },
   types::{
-    BootParameters, Component, ComponentArrayPostArray, Group,
-    HWInventoryByLocationList, K8sDetails, NodeMetadataArray,
+    Component, ComponentArrayPostArray, Group, HWInventoryByLocationList,
+    K8sDetails, NodeMetadataArray,
     bos::session_template::BosSessionTemplate,
+    bss::BootParameters,
     cfs::{
       cfs_configuration_details::LayerDetails,
       cfs_configuration_request::CfsConfigurationRequest,
       cfs_configuration_response::{CfsConfigurationResponse, Layer},
       session::{CfsSessionGetResponse, CfsSessionPostRequest},
     },
-    pcs::{
-        power_status::types::PowerStatusAll as FrontEndPowerStatusAll
-    },
     hsm::inventory::{RedfishEndpoint, RedfishEndpointArray},
     ims::Image,
+    pcs::power_status::types::PowerStatusAll as FrontEndPowerStatusAll,
   },
 };
 
 use StaticBackendDispatcher::*;
 use futures::AsyncBufRead;
 
+use chrono::NaiveDateTime;
 use csm_rs::backend_connector::Csm;
 use ochami_rs::backend_connector::Ochami;
 use serde_json::Value;
@@ -111,7 +111,7 @@ impl GroupTrait for StaticBackendDispatcher {
   async fn get_member_vec_from_group_name_vec(
     &self,
     auth_token: &str,
-    hsm_group_name_vec: Vec<String>,
+    hsm_group_name_vec: &[&str],
   ) -> Result<Vec<String>, Error> {
     match self {
       CSM(b) => {
@@ -128,7 +128,7 @@ impl GroupTrait for StaticBackendDispatcher {
   async fn get_group_map_and_filter_by_group_vec(
     &self,
     auth_token: &str,
-    hsm_name_vec: Vec<&str>,
+    hsm_name_vec: &[&str],
   ) -> Result<HashMap<String, Vec<String>>, Error> {
     match self {
       CSM(b) => {
@@ -205,7 +205,7 @@ impl GroupTrait for StaticBackendDispatcher {
   async fn get_hsm_map_and_filter_by_hsm_name_vec(
     &self,
     auth_token: &str,
-    hsm_name_vec: Vec<&str>,
+    hsm_name_vec: &[&str],
   ) -> Result<HashMap<String, Vec<String>>, Error> {
     match self {
       CSM(b) => {
@@ -237,7 +237,7 @@ impl GroupTrait for StaticBackendDispatcher {
     &self,
     auth_token: &str,
     group_label: &str,
-    xnames: Vec<&str>,
+    xnames: &[&str],
   ) -> Result<Vec<String>, Error> {
     match self {
       CSM(b) => {
@@ -275,7 +275,7 @@ impl GroupTrait for StaticBackendDispatcher {
     auth_token: &str,
     target_hsm_group_name: &str,
     parent_hsm_group_name: &str,
-    new_target_hsm_members: Vec<&str>,
+    new_target_hsm_members: &[&str],
   ) -> Result<(Vec<String>, Vec<String>), Error> {
     match self {
       CSM(b) => {
@@ -304,8 +304,8 @@ impl GroupTrait for StaticBackendDispatcher {
     &self,
     auth_token: &str,
     group_name: &str,
-    members_to_remove: &Vec<String>,
-    members_to_add: &Vec<String>,
+    members_to_remove: &[&str],
+    members_to_add: &[&str],
   ) -> Result<(), Error> {
     match self {
       CSM(b) => {
@@ -503,6 +503,18 @@ impl ComponentTrait for StaticBackendDispatcher {
       OCHAMI(b) => b.delete_node(auth_token, id).await,
     }
   }
+
+  async fn nid_to_xname(
+    &self,
+    auth_token: &str,
+    user_input_nid: &str,
+    is_regex: bool,
+  ) -> Result<Vec<String>, Error> {
+    match self {
+      CSM(b) => b.nid_to_xname(auth_token, user_input_nid, is_regex).await,
+      OCHAMI(b) => b.nid_to_xname(auth_token, user_input_nid, is_regex).await,
+    }
+  }
 }
 
 impl PCSTrait for StaticBackendDispatcher {
@@ -547,11 +559,26 @@ impl PCSTrait for StaticBackendDispatcher {
     nodes: &[String],
     power_status_filter: Option<&str>,
     management_state_filter: Option<&str>,
-
   ) -> Result<FrontEndPowerStatusAll, Error> {
     match self {
-      CSM(b) => b.power_status(auth_token, nodes, power_status_filter, management_state_filter).await,
-      OCHAMI(b) => b.power_status(auth_token, nodes, power_status_filter, management_state_filter).await,
+      CSM(b) => {
+        b.power_status(
+          auth_token,
+          nodes,
+          power_status_filter,
+          management_state_filter,
+        )
+        .await
+      }
+      OCHAMI(b) => {
+        b.power_status(
+          auth_token,
+          nodes,
+          power_status_filter,
+          management_state_filter,
+        )
+        .await
+      }
     }
   }
 }
@@ -704,33 +731,6 @@ impl RedfishEndpointTrait for StaticBackendDispatcher {
   }
 }
 
-impl BackendTrait for StaticBackendDispatcher {
-  fn test_backend_trait(&self) -> String {
-    println!("in manta backend");
-    "in manta backend".to_string()
-  }
-
-  // AUTHENTICATION
-  async fn get_api_token(&self, site_name: &str) -> Result<String, Error> {
-    match self {
-      CSM(b) => b.get_api_token(site_name).await,
-      OCHAMI(b) => b.get_api_token(site_name).await,
-    }
-  }
-
-  async fn nid_to_xname(
-    &self,
-    auth_token: &str,
-    user_input_nid: &str,
-    is_regex: bool,
-  ) -> Result<Vec<String>, Error> {
-    match self {
-      CSM(b) => b.nid_to_xname(auth_token, user_input_nid, is_regex).await,
-      OCHAMI(b) => b.nid_to_xname(auth_token, user_input_nid, is_regex).await,
-    }
-  }
-}
-
 impl CfsTrait for StaticBackendDispatcher {
   type T = Pin<Box<dyn AsyncBufRead + Send>>;
 
@@ -811,10 +811,11 @@ impl CfsTrait for StaticBackendDispatcher {
     shasta_token: &str,
     shasta_base_url: &str,
     shasta_root_cert: &[u8],
-    hsm_group_name_vec_opt: Option<Vec<String>>,
-    xname_vec_opt: Option<Vec<&str>>,
+    hsm_group_name_vec_opt: Vec<String>,
+    xname_vec_opt: Vec<&str>,
     min_age_opt: Option<&String>,
     max_age_opt: Option<&String>,
+    type_opt: Option<&String>,
     status_opt: Option<&String>,
     cfs_session_name_opt: Option<&String>,
     limit_number_opt: Option<&u8>,
@@ -830,6 +831,7 @@ impl CfsTrait for StaticBackendDispatcher {
           xname_vec_opt,
           min_age_opt,
           max_age_opt,
+          type_opt,
           status_opt,
           cfs_session_name_opt,
           limit_number_opt,
@@ -846,63 +848,11 @@ impl CfsTrait for StaticBackendDispatcher {
           xname_vec_opt,
           min_age_opt,
           max_age_opt,
+          type_opt,
           status_opt,
           cfs_session_name_opt,
           limit_number_opt,
           is_succeded_opt,
-        )
-        .await
-      }
-    }
-  }
-
-  async fn get_sessions_by_xname(
-    &self,
-    auth_token: &str,
-    base_url: &str,
-    root_cert: &[u8],
-    xname_vec: &[&str],
-    limit_opt: Option<u8>,
-    after_id_opt: Option<String>,
-    min_age_opt: Option<String>,
-    max_age_opt: Option<String>,
-    status_opt: Option<String>,
-    name_contains_opt: Option<String>,
-    is_succeded_opt: Option<bool>,
-    tags_opt: Option<String>,
-  ) -> Result<Vec<CfsSessionGetResponse>, Error> {
-    match self {
-      CSM(b) => {
-        b.get_sessions_by_xname(
-          auth_token,
-          base_url,
-          root_cert,
-          xname_vec,
-          limit_opt,
-          after_id_opt,
-          min_age_opt,
-          max_age_opt,
-          status_opt,
-          name_contains_opt,
-          is_succeded_opt,
-          tags_opt,
-        )
-        .await
-      }
-      OCHAMI(b) => {
-        b.get_sessions_by_xname(
-          auth_token,
-          base_url,
-          root_cert,
-          xname_vec,
-          limit_opt,
-          after_id_opt,
-          min_age_opt,
-          max_age_opt,
-          status_opt,
-          name_contains_opt,
-          is_succeded_opt,
-          tags_opt,
         )
         .await
       }
@@ -914,9 +864,9 @@ impl CfsTrait for StaticBackendDispatcher {
     gitea_token: &str,
     gitea_base_url: &str,
     shasta_root_cert: &[u8],
-    repo_name_vec: Vec<String>,
-    local_git_commit_vec: Vec<String>,
-    playbook_file_name_opt: Option<&String>,
+    repo_name_vec: &[&str],
+    local_git_commit_vec: &[&str],
+    playbook_file_name_opt: Option<&str>,
   ) -> Result<CfsConfigurationRequest, Error> {
     match self {
       CSM(b) => {
@@ -980,7 +930,9 @@ impl CfsTrait for StaticBackendDispatcher {
     root_cert: &[u8],
     configuration_name: Option<&str>,
     configuration_name_pattern: Option<&str>,
-    hsm_group_name_vec: &[String],
+    hsm_group_name_vec: &[&str],
+    since_opt: Option<NaiveDateTime>,
+    until_opt: Option<NaiveDateTime>,
     limit_number_opt: Option<&u8>,
   ) -> Result<Vec<CfsConfigurationResponse>, Error> {
     match self {
@@ -992,6 +944,8 @@ impl CfsTrait for StaticBackendDispatcher {
           configuration_name,
           configuration_name_pattern,
           hsm_group_name_vec,
+          since_opt,
+          until_opt,
           limit_number_opt,
         )
         .await
@@ -1004,6 +958,8 @@ impl CfsTrait for StaticBackendDispatcher {
           configuration_name,
           configuration_name_pattern,
           hsm_group_name_vec,
+          since_opt,
+          until_opt,
           limit_number_opt,
         )
         .await
@@ -1085,6 +1041,7 @@ impl CfsTrait for StaticBackendDispatcher {
     shasta_root_cert: &[u8],
     configuration: &CfsConfigurationRequest,
     configuration_name: &str,
+    overwrite: bool,
   ) -> Result<CfsConfigurationResponse, Error> {
     match self {
       CSM(b) => {
@@ -1094,6 +1051,7 @@ impl CfsTrait for StaticBackendDispatcher {
           shasta_root_cert,
           configuration,
           configuration_name,
+          overwrite,
         )
         .await
       }
@@ -1104,6 +1062,7 @@ impl CfsTrait for StaticBackendDispatcher {
           shasta_root_cert,
           configuration,
           configuration_name,
+          overwrite,
         )
         .await
       }
@@ -1142,7 +1101,7 @@ impl CfsTrait for StaticBackendDispatcher {
     shasta_token: &str,
     site_name: &str,
     cfs_session_name: &str,
-    // k8s_api_url: &str,
+    timestamps: bool,
     k8s: &K8sDetails,
   ) -> Result<Pin<Box<dyn AsyncBufRead + Send>>, Error> {
     match self {
@@ -1151,7 +1110,7 @@ impl CfsTrait for StaticBackendDispatcher {
           shasta_token,
           site_name,
           cfs_session_name,
-          // k8s_api_url,
+          timestamps,
           k8s,
         )
         .await
@@ -1161,7 +1120,7 @@ impl CfsTrait for StaticBackendDispatcher {
           shasta_token,
           site_name,
           cfs_session_name,
-          // k8s_api_url,
+          timestamps,
           k8s,
         )
         .await
@@ -1174,16 +1133,21 @@ impl CfsTrait for StaticBackendDispatcher {
     auth_token: &str,
     site_name: &str,
     xname: &str,
+    timestamps: bool,
     k8s: &K8sDetails,
   ) -> Result<Pin<Box<dyn AsyncBufRead + Send>>, Error> {
     match self {
       CSM(b) => {
-        b.get_session_logs_stream_by_xname(auth_token, site_name, xname, k8s)
-          .await
+        b.get_session_logs_stream_by_xname(
+          auth_token, site_name, xname, timestamps, k8s,
+        )
+        .await
       }
       OCHAMI(b) => {
-        b.get_session_logs_stream_by_xname(auth_token, site_name, xname, k8s)
-          .await
+        b.get_session_logs_stream_by_xname(
+          auth_token, site_name, xname, timestamps, k8s,
+        )
+        .await
       }
     }
   }
@@ -1200,14 +1164,16 @@ impl SatTrait for StaticBackendDispatcher {
     k8s_api_url: &str,
     shasta_k8s_secrets: serde_json::Value,
     sat_template_file_yaml: serde_yaml::Value,
-    hsm_group_available_vec: &Vec<String>,
+    hsm_group_available_vec: &[&str],
     ansible_verbosity_opt: Option<u8>,
-    ansible_passthrough_opt: Option<&String>,
+    ansible_passthrough_opt: Option<&str>,
     gitea_base_url: &str,
     gitea_token: &str,
     do_not_reboot: bool,
     watch_logs: bool,
+    timestamps: bool,
     debug_on_failure: bool,
+    overwrite: bool,
     dry_run: bool,
   ) -> Result<(), Error> {
     match self {
@@ -1228,7 +1194,9 @@ impl SatTrait for StaticBackendDispatcher {
           gitea_token,
           do_not_reboot,
           watch_logs,
+          timestamps,
           debug_on_failure,
+          overwrite,
           dry_run,
         )
         .await
@@ -1250,7 +1218,9 @@ impl SatTrait for StaticBackendDispatcher {
           gitea_token,
           do_not_reboot,
           watch_logs,
+          timestamps,
           debug_on_failure,
+          overwrite,
           dry_run,
         )
         .await
@@ -1309,93 +1279,69 @@ impl ImsTrait for StaticBackendDispatcher {
   async fn get_images(
     &self,
     shasta_token: &str,
-    shasta_base_url: &str,
-    shasta_root_cert: &[u8],
     image_id_opt: Option<&str>,
   ) -> Result<Vec<Image>, Error> {
     match self {
-      CSM(b) => {
-        b.get_images(
-          shasta_token,
-          shasta_base_url,
-          shasta_root_cert,
-          image_id_opt,
-        )
-        .await
-      }
-      OCHAMI(b) => {
-        b.get_images(
-          shasta_token,
-          shasta_base_url,
-          shasta_root_cert,
-          image_id_opt,
-        )
-        .await
-      }
+      CSM(b) => b.get_images(shasta_token, image_id_opt).await,
+      OCHAMI(b) => b.get_images(shasta_token, image_id_opt).await,
     }
   }
 }
 
 impl ApplySessionTrait for StaticBackendDispatcher {
-  async fn i_apply_session(
+  async fn apply_session(
     &self,
     gitea_token: &str,
     gitea_base_url: &str,
     shasta_token: &str,
     shasta_base_url: &str,
     shasta_root_cert: &[u8],
-    // k8s_api_url: &str,
-    cfs_conf_sess_name: Option<&String>,
-    playbook_yaml_file_name_opt: Option<&String>,
-    hsm_group: Option<&String>,
-    repos_paths: Vec<PathBuf>,
-    ansible_limit: Option<String>,
-    ansible_verbosity: Option<String>,
-    ansible_passthrough: Option<String>,
+    cfs_conf_sess_name: Option<&str>,
+    playbook_yaml_file_name_opt: Option<&str>,
+    hsm_group: Option<&str>,
+    repos_name_vec: &[&str],
+    repos_last_commit_id_vec: &[&str],
+    ansible_limit: Option<&str>,
+    ansible_verbosity: Option<&str>,
+    ansible_passthrough: Option<&str>,
     // watch_logs: bool,
     /* kafka_audit: &Kafka,
     k8s: &K8sDetails, */
   ) -> Result<(String, String), Error> {
     match self {
       CSM(b) => {
-        b.i_apply_session(
+        b.apply_session(
           gitea_token,
           gitea_base_url,
           shasta_token,
           shasta_base_url,
           shasta_root_cert,
-          // k8s_api_url,
           cfs_conf_sess_name,
           playbook_yaml_file_name_opt,
           hsm_group,
-          repos_paths,
+          repos_name_vec,
+          repos_last_commit_id_vec,
           ansible_limit,
           ansible_verbosity,
           ansible_passthrough,
-          // watch_logs,
-          /* kafka_audit,
-          k8s, */
         )
         .await
       }
       OCHAMI(b) => {
-        b.i_apply_session(
+        b.apply_session(
           gitea_token,
           gitea_base_url,
           shasta_token,
           shasta_base_url,
           shasta_root_cert,
-          // k8s_api_url,
           cfs_conf_sess_name,
           playbook_yaml_file_name_opt,
           hsm_group,
-          repos_paths,
+          repos_name_vec,
+          repos_last_commit_id_vec,
           ansible_limit,
           ansible_verbosity,
           ansible_passthrough,
-          // watch_logs,
-          /* kafka_audit,
-          k8s, */
         )
         .await
       }
@@ -1409,11 +1355,15 @@ impl MigrateRestoreTrait for StaticBackendDispatcher {
     shasta_token: &str,
     shasta_base_url: &str,
     shasta_root_cert: &[u8],
-    bos_file: Option<&String>,
-    cfs_file: Option<&String>,
-    hsm_file: Option<&String>,
-    ims_file: Option<&String>,
-    image_dir: Option<&String>,
+    bos_file: Option<&str>,
+    cfs_file: Option<&str>,
+    hsm_file: Option<&str>,
+    ims_file: Option<&str>,
+    image_dir: Option<&str>,
+    overwrite_group: bool,
+    overwrite_configuration: bool,
+    overwrite_image: bool,
+    overwrite_template: bool,
   ) -> Result<(), Error> {
     match self {
       CSM(b) => {
@@ -1426,6 +1376,10 @@ impl MigrateRestoreTrait for StaticBackendDispatcher {
           hsm_file,
           ims_file,
           image_dir,
+          overwrite_group,
+          overwrite_configuration,
+          overwrite_image,
+          overwrite_template,
         )
         .await
       }
@@ -1439,6 +1393,10 @@ impl MigrateRestoreTrait for StaticBackendDispatcher {
           hsm_file,
           ims_file,
           image_dir,
+          overwrite_group,
+          overwrite_configuration,
+          overwrite_image,
+          overwrite_template,
         )
         .await
       }
@@ -1452,8 +1410,8 @@ impl MigrateBackupTrait for StaticBackendDispatcher {
     shasta_token: &str,
     shasta_base_url: &str,
     shasta_root_cert: &[u8],
-    bos: Option<&String>,
-    destination: Option<&String>,
+    bos: Option<&str>,
+    destination: Option<&str>,
   ) -> Result<(), Error> {
     match self {
       CSM(b) => {
