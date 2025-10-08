@@ -55,7 +55,7 @@ use crate::jwt_utils::get_claims_from_jwt_token;
 
 use tokio_util::io::ReaderStream;
 
-use anyhow::{Error, Result, bail};
+use anyhow::{Result, bail};
 
 use crate::handlers::*;
 
@@ -496,7 +496,7 @@ pub fn get_csm_root_cert_content(site: &str) -> Result<Vec<u8>> {
   let mut buf = Vec::new();
   let mut root_cert_file = File::open(config_path)?;
 
-  root_cert_file.read_to_end(&mut buf);
+  let _ = root_cert_file.read_to_end(&mut buf);
 
   /* let _ = match root_cert_file_rslt {
     Ok(mut file) => file.read_to_end(&mut buf),
