@@ -302,7 +302,6 @@ async fn get_cfs_session(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -349,7 +348,6 @@ async fn get_cfs_session(
     .await
     .unwrap_or_else(|e| {
       tracing::error!("Failed to get CFS sessions. Reason:\n{e}");
-      std::process::exit(1);
     });
 
   Ok(Json(serde_json::to_value(cfs_session_vec).unwrap()))
@@ -495,8 +493,7 @@ pub fn get_csm_root_cert_content(site: &str) -> Vec<u8> {
   let _ = match root_cert_file_rslt {
     Ok(mut file) => file.read_to_end(&mut buf),
     Err(_) => {
-      eprintln!("Root cert file for CSM not found. Exit");
-      std::process::exit(1);
+      eprintln!("Root cert file for CSM not found");
     }
   };
 
@@ -602,7 +599,6 @@ async fn handle_socket(headers: HeaderMap, socket: WebSocket, xname: String) {
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -851,7 +847,6 @@ async fn get_all_bss_boot_parameters(headers: HeaderMap) -> Response {
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -903,7 +898,6 @@ async fn get_bss_boot_parameters(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -954,7 +948,6 @@ async fn post_bss_boot_parameters(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -1006,7 +999,6 @@ async fn delete_bss_boot_parameters(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -1055,7 +1047,6 @@ async fn get_all_groups(headers: HeaderMap) -> Response {
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -1121,7 +1112,6 @@ async fn get_group_details(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -1183,7 +1173,6 @@ async fn get_hsm_hardware(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -1288,7 +1277,6 @@ async fn power_off_node(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -1341,7 +1329,6 @@ async fn power_on_node(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -1393,7 +1380,6 @@ async fn power_reset_node(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
@@ -1453,7 +1439,6 @@ async fn power_status_node(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-      std::process::exit(1);
     }
   };
 
