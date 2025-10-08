@@ -35,7 +35,7 @@ manta-backend-dispatcher = "0.13.1"
 ochami-rs = "0.6.6"
 csm-rs = "0.88.1"
 
-anyhow = { version = "1.0.98", default-features = false }
+anyhow = { version = "1.0.100" }
 directories = "6.0.0" # XDG Base Directory Specification
 config = { version = "0.15.11", features = ["toml"] } # used to read manta configuration file
 axum = { version = "0.8.3", features = ["ws", "macros"] }

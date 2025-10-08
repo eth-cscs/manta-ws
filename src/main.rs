@@ -55,7 +55,7 @@ use crate::jwt_utils::get_claims_from_jwt_token;
 
 use tokio_util::io::ReaderStream;
 
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 
 use crate::handlers::*;
 
@@ -302,6 +302,7 @@ async fn get_cfs_session(
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
   };
 
@@ -330,7 +331,7 @@ async fn get_cfs_session(
   let hsm_group_available_vec: Vec<String> =
     backend.get_group_name_available(&auth_token).await.unwrap();
 
-  let cfs_session_vec = backend
+  let cfs_session_vec_rslt = backend
     .get_and_filter_sessions(
       &auth_token,
       shasta_base_url,
@@ -345,10 +346,15 @@ async fn get_cfs_session(
       None,
       None,
     )
-    .await
-    .unwrap_or_else(|e| {
-      tracing::error!("Failed to get CFS sessions. Reason:\n{e}");
-    });
+    .await;
+
+  let cfs_session_vec = match cfs_session_vec_rslt {
+    Ok(cfs_session_vec) => cfs_session_vec,
+    Err(e) => {
+      eprintln!("ERROR - Failed to get CFS sessions. Reason:\n{:#?}", e);
+      return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+  };
 
   Ok(Json(serde_json::to_value(cfs_session_vec).unwrap()))
 }
@@ -483,21 +489,23 @@ pub fn get_configuration() -> Config {
     .unwrap()
 }
 
-pub fn get_csm_root_cert_content(site: &str) -> Vec<u8> {
+pub fn get_csm_root_cert_content(site: &str) -> Result<Vec<u8>> {
   let mut config_path = get_configuration_file_path();
   config_path.push(site.to_string() + "_root_cert.pem");
 
   let mut buf = Vec::new();
-  let root_cert_file_rslt = File::open(config_path);
+  let mut root_cert_file = File::open(config_path)?;
 
-  let _ = match root_cert_file_rslt {
+  root_cert_file.read_to_end(&mut buf);
+
+  /* let _ = match root_cert_file_rslt {
     Ok(mut file) => file.read_to_end(&mut buf),
     Err(_) => {
-      eprintln!("Root cert file for CSM not found");
+      return Err("Root cert file for CSM not found".into());
     }
-  };
+  }; */
 
-  buf
+  Ok(buf)
 }
 
 async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
@@ -523,7 +531,13 @@ async fn authenticate(headers: HeaderMap) -> Result<String, StatusCode> {
 
   // let settings_hsm_group_name_opt = settings.get_string("hsm_group").ok();
 
-  let shasta_root_cert = get_csm_root_cert_content("alps");
+  let shasta_root_cert = get_csm_root_cert_content("alps").map_err(|e| {
+    eprintln!(
+      "ERROR - Unable to get CSM root cert content. Reason:\n{:#?}",
+      e
+    );
+    StatusCode::INTERNAL_SERVER_ERROR
+  })?;
 
   let base64_user_credentials =
     if let Some(usercredentials) = headers.get("authorization") {
@@ -595,12 +609,7 @@ async fn handle_socket(headers: HeaderMap, socket: WebSocket, xname: String) {
   let site_name: String = configuration.site;
   let site_detail_value_opt = configuration.sites.get(&site_name);
 
-  let site = match site_detail_value_opt {
-    Some(site_detail_value) => site_detail_value,
-    None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
-    }
-  };
+  let site = site_detail_value_opt.unwrap();
 
   let k8s_details = site
     .k8s
@@ -847,6 +856,7 @@ async fn get_all_bss_boot_parameters(headers: HeaderMap) -> Response {
     Some(site_detail_value) => site_detail_value,
     None => {
       eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
   };
 
@@ -897,7 +907,10 @@ async fn get_bss_boot_parameters(
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
     }
   };
 
@@ -924,7 +937,9 @@ async fn get_bss_boot_parameters(
     backend.get_bootparameters(auth_token, &[xname]).await;
 
   match boot_parameters_rslt {
-    Ok(response) => return (StatusCode::OK, Json(response)).into_response(),
+    Ok(response) => {
+      return (StatusCode::OK, Json(response)).into_response();
+    }
     Err(e) => {
       return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
         .into_response();
@@ -947,7 +962,10 @@ async fn post_bss_boot_parameters(
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
     }
   };
 
@@ -998,7 +1016,10 @@ async fn delete_bss_boot_parameters(
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
     }
   };
 
@@ -1046,7 +1067,10 @@ async fn get_all_groups(headers: HeaderMap) -> Response {
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
     }
   };
 
@@ -1111,7 +1135,10 @@ async fn get_group_details(
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
     }
   };
 
@@ -1172,7 +1199,10 @@ async fn get_hsm_hardware(
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
     }
   };
 
@@ -1276,7 +1306,10 @@ async fn power_off_node(
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
     }
   };
 
@@ -1328,7 +1361,10 @@ async fn power_on_node(
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
     }
   };
 
@@ -1379,7 +1415,10 @@ async fn power_reset_node(
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
     }
   };
 
@@ -1438,7 +1477,11 @@ async fn power_status_node(
   let site = match site_detail_value_opt {
     Some(site_detail_value) => site_detail_value,
     None => {
-      eprintln!("ERROR - Site '{}' not found in configuration", site_name);
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return Err(
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg)).into_response(),
+      );
     }
   };
 
@@ -1474,7 +1517,7 @@ async fn power_status_node(
 
   match response {
     Ok(response) => Ok(Json(response)),
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR.into_response()),
   }
 }
 
@@ -1515,7 +1558,15 @@ async fn node_migration(
     .unwrap()
     .to_string();
 
-  let shasta_root_cert = get_csm_root_cert_content("alps");
+  let shasta_root_cert = get_csm_root_cert_content("alps")
+    .map_err(|e| {
+      eprintln!(
+        "ERROR - Unable to get CSM root cert content. Reason:\n{:#?}",
+        e
+      );
+      StatusCode::INTERNAL_SERVER_ERROR
+    })
+    .unwrap();
 
   // Get auth token
   let auth_token = if let Some(auth_header) = headers.get("authorization") {
