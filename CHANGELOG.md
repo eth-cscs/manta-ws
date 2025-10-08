@@ -1,3 +1,18 @@
+## What's Changed in v0.2.0
+* chore: Release manta-ws version 0.2.0 by @Masber
+* chore: cargo fix by @Masber
+* fix: error management bugs by @Masber
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.19...v0.2.0
+
+## What's Changed in v0.1.19
+* chore: Release manta-ws version 0.1.19 by @Masber
+* chore: Release manta-ws version 0.1.18 by @Masber
+* fix: stop exiting the application when an error occurs by @Masber
+* chore: update CHANGELOG.md for v0.1.17 by @actions-user
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.1.17...v0.1.19
+
 ## What's Changed in v0.1.17
 * chore: Release manta-ws version 0.1.17 by @Masber
 * fix: compilation issues by @Masber
