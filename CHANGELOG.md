@@ -1,3 +1,8 @@
+## What's Changed in 0.3.0
+* chore: update CHANGELOG.md for v0.3.0 by @actions-user
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.3.0...0.3.0
+
 ## What's Changed in v0.3.0
 * chore: Release manta-ws version 0.3.0 by @Masber
 * fix(https://github.com/eth-cscs/manta-ws/issues/29): fix route to delete a boot parameter by @Masber
