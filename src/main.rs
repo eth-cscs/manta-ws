@@ -107,10 +107,7 @@ async fn main() {
     .route("/bss/boot-parameters", get(get_all_bss_boot_parameters))
     .route("/bss/boot-parameters/{xname}", get(get_bss_boot_parameters))
     .route("/bss/boot-parameters", post(post_bss_boot_parameters))
-    .route(
-      "/bss/boot-parameters/{xname}",
-      delete(delete_bss_boot_parameters),
-    )
+    .route("/bss/boot-parameters", delete(delete_bss_boot_parameters))
     .route("/redfish", get(get_all_redfish))
     .route("/redfish/{xname}", get(get_redfish))
     .route("/redfish", post(post_redfish))
@@ -879,6 +876,7 @@ async fn get_all_bss_boot_parameters(headers: HeaderMap) -> Response {
   let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
   let auth_token = auth_header.split(" ").nth(1).unwrap();
 
+  dbg!("0");
   let boot_parameters_rslt = backend.get_all_bootparameters(auth_token).await;
 
   match boot_parameters_rslt {
@@ -1002,6 +1000,60 @@ async fn post_bss_boot_parameters(
 }
 
 async fn delete_bss_boot_parameters(
+  headers: HeaderMap,
+  Json(boot_parameters): Json<BootParameters>,
+) -> Response {
+  // Configuration
+  let settings = common::config::get_configuration().await.unwrap();
+
+  let configuration: MantaConfiguration = settings.try_deserialize().unwrap();
+
+  let site_name: String = configuration.site;
+  let site_detail_value_opt = configuration.sites.get(&site_name);
+
+  let site = match site_detail_value_opt {
+    Some(site_detail_value) => site_detail_value,
+    None => {
+      let error_msg =
+        format!("ERROR - Site '{}' not found in configuration", site_name);
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(error_msg))
+        .into_response();
+    }
+  };
+
+  let backend_tech = &site.backend;
+  let shasta_base_url = &site.shasta_base_url;
+
+  let root_ca_cert_file = &site.root_ca_cert_file;
+
+  let shasta_root_cert =
+    common::config::get_csm_root_cert_content(&root_ca_cert_file).unwrap();
+
+  // Backend
+  let backend = StaticBackendDispatcher::new(
+    &backend_tech,
+    &shasta_base_url,
+    &shasta_root_cert,
+  );
+
+  // Get auth token
+  let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
+  let auth_token = auth_header.split(" ").nth(1).unwrap();
+
+  let bss_boot_parameters_rslt = backend
+    .delete_bootparameters(auth_token, &boot_parameters)
+    .await;
+
+  match bss_boot_parameters_rslt {
+    Ok(response) => return (StatusCode::OK, Json(response)).into_response(),
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string()))
+        .into_response();
+    }
+  }
+}
+
+async fn delete_bss_boot_parameters_by_xname(
   headers: HeaderMap,
   Json(boot_parameters): Json<BootParameters>,
 ) -> Response {
