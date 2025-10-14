@@ -19,9 +19,11 @@ use manta_backend_dispatcher::{
     bss::BootParametersTrait,
     cfs::CfsTrait,
     hsm::{
-      component::ComponentTrait, group::GroupTrait,
+      component::ComponentTrait,
+      group::GroupTrait,
       hardware_inventory::HardwareInventory,
       redfish_endpoint::RedfishEndpointTrait,
+      component_ethernet_interface::ComponentEthernetInterfaceTrait,
     },
     ims::ImsTrait,
     migrate_backup::MigrateBackupTrait,
@@ -39,7 +41,13 @@ use manta_backend_dispatcher::{
       cfs_configuration_response::{CfsConfigurationResponse, Layer},
       session::{CfsSessionGetResponse, CfsSessionPostRequest},
     },
-    hsm::inventory::{RedfishEndpoint, RedfishEndpointArray},
+    hsm::inventory::{
+        RedfishEndpoint, 
+        RedfishEndpointArray,
+        IpAddressMapping,
+        ComponentEthernetInterface,
+        ComponentEthernetInterfaceArray,
+    },
     ims::Image,
     pcs::power_status::types::PowerStatusAll as FrontEndPowerStatusAll,
   },
@@ -731,6 +739,207 @@ impl RedfishEndpointTrait for StaticBackendDispatcher {
   }
 }
 
+// start --------------------------
+impl ComponentEthernetInterfaceTrait for StaticBackendDispatcher {
+  async fn get_all_component_ethernet_interfaces(
+    &self,
+    auth_token: &str,
+    mac_address: &str,
+    ip_address: &str,
+    network: &str,
+    component_id: &str, // Node's xname
+    r#type: &str,
+    older_than: &str,
+    newer_than: &str,
+  ) -> Result<ComponentEthernetInterfaceArray, Error> {
+    match self {
+      CSM(_b) => todo!(),
+//      CSM(b) =>    b.get_all_component_ethernet_interfaces(
+//        &self,
+//        auth_token,
+//        mac_address,
+//        ip_address,
+//        network,
+//        component_id,
+//        r#type,
+//        older_than,
+//        newer_than,
+//      ).await,
+      OCHAMI(b) => b.get_all_component_ethernet_interfaces(
+        auth_token,
+        mac_address,
+        ip_address,
+        network,
+        component_id,
+        r#type,
+        older_than,
+        newer_than,
+      ).await,
+    }
+  }
+
+  async fn get_component_ethernet_interface(
+    &self,
+    auth_token: &str,
+    eth_interface_id: &str,
+  ) -> Result<ComponentEthernetInterface, Error> {
+    match self {
+      CSM(_b) => todo!(),
+//      CSM(b) => {
+//        b.get_component_ethernet_interface(
+//          &self
+//          auth_token,
+//          eth_interface_id,
+//        )
+//        .await
+//      }
+      OCHAMI(b) => {
+        b.get_component_ethernet_interface(
+          auth_token,
+          eth_interface_id,
+        )
+        .await
+      }
+    }
+  }
+
+  async fn update_component_ethernet_interface(
+    &self,
+    auth_token: &str,
+    eth_interface_id: &str,
+    description: Option<&str>,
+    ip_address_mapping: (&str, &str), 
+  ) -> Result<Value, Error> {
+    match self {
+      CSM(_b) => todo!(),
+//      CSM(b) => {
+//        b.update_component_ethernet_interface(
+//          &self
+//          auth_token,
+//          eth_interface_id,
+//          description,
+//          ip_address_mapping,
+//        )
+//        .await
+//      }
+      OCHAMI(b) => {
+        b.update_component_ethernet_interface(
+          auth_token,
+          eth_interface_id,
+          description,
+          ip_address_mapping,
+        )
+        .await
+      }
+    }
+  }
+
+  async fn delete_all_component_ethernet_interfaces(
+    &self,
+    auth_token: &str,
+  ) -> Result<Value, Error> {
+    match self {
+      CSM(_b) => todo!(),
+//      CSM(b) => {
+//        b.delete_all_component_ethernet_interface(
+//          &self
+//          auth_token,
+//        )
+//        .await
+//      }
+      OCHAMI(b) => {
+        b.delete_all_component_ethernet_interfaces(
+          auth_token,
+        )
+        .await
+      }
+    }
+  }
+
+  async fn delete_component_ethernet_interface(
+    &self,
+    auth_token: &str,
+    eth_interface_id: &str,
+  ) -> Result<Value, Error> {
+    match self {
+      CSM(_b) => todo!(),
+//      CSM(b) => {
+//        b.delete_component_ethernet_interface(
+//          &self
+//          auth_token,
+//          eth_interface_id,
+//        )
+//        .await
+//      }
+      OCHAMI(b) => {
+        b.delete_component_ethernet_interface(
+          auth_token,
+          eth_interface_id,
+        )
+        .await
+      }
+    }
+  }
+
+  async fn get_ip_addresses(
+    &self,
+    auth_token: &str,
+    eth_interface_id: &str,
+  ) -> Result<Vec<IpAddressMapping>, Error> {
+    match self {
+      CSM(_b) => todo!(),
+//      CSM(b) => {
+//        b.get_ip_addresses(
+//          &self
+//          auth_token,
+//          eth_interface_id,
+//        )
+//        .await
+//      }
+      OCHAMI(b) => {
+        b.get_ip_addresses(
+          auth_token,
+          eth_interface_id,
+        )
+        .await
+      }
+    }
+  }
+
+  async fn delete_ip_address(
+    &self,
+    auth_token: &str,
+    _group_label: &str,
+    eth_interface_id: &str,
+    ip_address: &str,
+  ) -> Result<Value, Error> {
+    match self {
+      CSM(_b) => todo!(),
+//        b.delete_ip_address(
+//          &self
+//          auth_token,
+//          _group_label,
+//          eth_interface_id,
+//          ip_address,
+//        )
+//        .await
+//      }
+      OCHAMI(b) => {
+        b.delete_ip_address(
+          auth_token,
+          _group_label,
+          eth_interface_id,
+          ip_address,
+        )
+        .await
+      }
+    }
+  }
+
+
+}
+
+// end --------------------------
 impl CfsTrait for StaticBackendDispatcher {
   type T = Pin<Box<dyn AsyncBufRead + Send>>;
 
