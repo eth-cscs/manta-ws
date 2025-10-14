@@ -51,7 +51,7 @@ use tracing_subscriber::{
   prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::jwt_utils::get_claims_from_jwt_token;
+use crate::{commands::get_all_ethernet, jwt_utils::get_claims_from_jwt_token};
 
 use tokio_util::io::ReaderStream;
 
@@ -115,6 +115,13 @@ async fn main() {
     .route("/redfish/{xname}", get(get_redfish))
     .route("/redfish", post(post_redfish))
     .route("/redfish/{xname}", delete(delete_redfish))
+    .route("/ethernet-interface", get(get_all_ethernet))
+    // .route("/ethernet-interface/{xname}", get(get_ethernet_interface))
+    // .route("/ethernet-interface", post(post_ethernet_interface))
+    // .route(
+    //   "/ethernet-interface/{xname}",
+    //   delete(delete_ethernet_interface),
+    // )
     .route("/authenticate", get(authenticate))
     .route("/console/{xname}", get(ws_console))
     .route("/cfssession/{cfssession}", get(get_cfs_session))
@@ -140,10 +147,7 @@ async fn main() {
   // `axum::Server` is a re-export of `hyper::Server`
   let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
   println!("listening on {}", addr);
-  //    axum::Server::bind(&addr)
-  //        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-  //        .await
-  //        .unwrap();
+
   axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app)
     .await
     .unwrap()

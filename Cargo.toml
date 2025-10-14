@@ -1,7 +1,7 @@
 [package]
 name = "manta-ws"
 description = "HTTP server for Mesa"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 publish = false
 
@@ -19,9 +19,9 @@ strip = true        # Strip symbols from binary*
 
 # PROD
 
-#manta-backend-dispatcher = "0.1.77"
-#ochami-rs = "0.1.77"
-#csm-rs = "0.5.0-beta.7"
+manta-backend-dispatcher = "0.14.0"
+ochami-rs = "0.7.0"
+csm-rs = "0.89.0"
 
 # DEV
 
@@ -31,12 +31,9 @@ strip = true        # Strip symbols from binary*
 # ochami-rs = { git = "https://github.com/OpenCHAMI/ochami-rs", branch="feature/power-status" } # Only for development purposes
 #csm-rs = { path = "../csm-rs" } # Only for development purposes
 # csm-rs = { git = "https://github.com/eth-cscs/csm-rs", branch="feature/power-status" } # Only for development purposes
-#manta-backend-dispatcher = "0.13.1"
-manta-backend-dispatcher = { path = "../manta-backend-dispatcher" }
-#ochami-rs = "0.6.6"
-ochami-rs = { path = "../ochami-rs" }
-#csm-rs = "0.88.1"
-csm-rs = { path = "../csm-rs" }
+# manta-backend-dispatcher = { path = "../manta-backend-dispatcher" }
+# ochami-rs = { path = "../ochami-rs" }
+# csm-rs = { path = "../csm-rs" }
 
 anyhow = { version = "1.0.100" }
 directories = "6.0.0" # XDG Base Directory Specification
