@@ -52,7 +52,10 @@ use tracing_subscriber::{
 };
 
 use crate::{
-  commands::{delete_ethernet, get_all_ethernet, get_ethernet, post_ethernet},
+  commands::{
+    delete_all_ethernet, delete_ethernet, get_all_ethernet, get_ethernet,
+    post_ethernet,
+  },
   jwt_utils::get_claims_from_jwt_token,
 };
 
@@ -121,6 +124,7 @@ async fn main() {
     .route("/ethernet-interface", get(get_all_ethernet))
     .route("/ethernet-interface/{id}", get(get_ethernet))
     .route("/ethernet-interface", post(post_ethernet))
+    .route("/ethernet-interface", delete(delete_all_ethernet))
     .route("/ethernet-interface/{id}", delete(delete_ethernet))
     .route("/authenticate", get(authenticate))
     .route("/console/{xname}", get(ws_console))
