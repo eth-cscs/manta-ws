@@ -19,21 +19,21 @@ strip = true        # Strip symbols from binary*
 
 # PROD
 
-manta-backend-dispatcher = "0.14.0"
-ochami-rs = "0.7.0"
-csm-rs = "0.89.0"
+manta-backend-dispatcher = "0.15.0"
+ochami-rs = "0.8.0"
+csm-rs = "0.90.0"
 
-# DEV
+# DEV (local disk)
 
-#manta-backend-dispatcher = { path = "../manta-backend-dispatcher" } # Only for development purposes
+# manta-backend-dispatcher = { path = "../manta-backend-dispatcher" } # Only for development purposes
+# ochami-rs = { path = "../ochami-rs" } # Only for development purposes
+# csm-rs = { path = "../csm-rs" } # Only for development purposes
+
+# DEV (git repos)
+
 # manta-backend-dispatcher = { git = "https://github.com/eth-cscs/manta-backend-dispatcher", branch="feature/power-status" } # Only for development purposes
-#ochami-rs = { path = "../ochami-rs" } # Only for development purposes
 # ochami-rs = { git = "https://github.com/OpenCHAMI/ochami-rs", branch="feature/power-status" } # Only for development purposes
-#csm-rs = { path = "../csm-rs" } # Only for development purposes
 # csm-rs = { git = "https://github.com/eth-cscs/csm-rs", branch="feature/power-status" } # Only for development purposes
-# manta-backend-dispatcher = { path = "../manta-backend-dispatcher" }
-# ochami-rs = { path = "../ochami-rs" }
-# csm-rs = { path = "../csm-rs" }
 
 anyhow = { version = "1.0.100" }
 directories = "6.0.0" # XDG Base Directory Specification

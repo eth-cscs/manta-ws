@@ -51,7 +51,10 @@ use tracing_subscriber::{
   prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::{commands::get_all_ethernet, jwt_utils::get_claims_from_jwt_token};
+use crate::{
+  commands::{delete_ethernet, get_all_ethernet, get_ethernet, post_ethernet},
+  jwt_utils::get_claims_from_jwt_token,
+};
 
 use tokio_util::io::ReaderStream;
 
@@ -116,12 +119,9 @@ async fn main() {
     .route("/redfish", post(post_redfish))
     .route("/redfish/{xname}", delete(delete_redfish))
     .route("/ethernet-interface", get(get_all_ethernet))
-    // .route("/ethernet-interface/{xname}", get(get_ethernet_interface))
-    // .route("/ethernet-interface", post(post_ethernet_interface))
-    // .route(
-    //   "/ethernet-interface/{xname}",
-    //   delete(delete_ethernet_interface),
-    // )
+    .route("/ethernet-interface/{id}", get(get_ethernet))
+    .route("/ethernet-interface", post(post_ethernet))
+    .route("/ethernet-interface/{id}", delete(delete_ethernet))
     .route("/authenticate", get(authenticate))
     .route("/console/{xname}", get(ws_console))
     .route("/cfssession/{cfssession}", get(get_cfs_session))
