@@ -1,4 +1,9 @@
 ## What's Changed in 0.3.0
+* chore: update dockerfile by @Masber in [#32](https://github.com/eth-cscs/manta-ws/pull/32)
+* fix(docker): install complete perl by @t-h2o
+* chore(docker): pin the debian slim version by @t-h2o
+* chore(docker): bump rust version by @t-h2o
+* chore: update CHANGELOG.md for v0.3.0 by @actions-user
 * chore: update CHANGELOG.md for v0.3.0 by @actions-user
 
 **Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.3.0...0.3.0
