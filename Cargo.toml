@@ -21,7 +21,7 @@ strip = true        # Strip symbols from binary*
 
 manta-backend-dispatcher = "0.21.1"
 ochami-rs = "0.11.2"
-csm-rs = "0.102.1"
+csm-rs = "0.102.2"
 
 # DEV (local disk)
 

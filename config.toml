@@ -1,0 +1,28 @@
+log = "info"
+site = "alps"
+audit_file = "/tmp/manta_audit.log"
+parent_hsm_group = "nodes_free"
+
+[sites]
+
+[sites.alps]
+backend = "csm"
+# socks5 proxy for accessing k8s API
+# socks5_proxy = "socks5://127.0.0.1:1080"
+shasta_base_url = "https://api.cmn.alps.cscs.ch/apis"
+root_ca_cert_file = "alps_root_cert.pem"
+
+[sites.alps.k8s]
+api_url = "https://148.187.109.96:6444"
+# Some manta commands requires k8s or Gitea credentials. There are 2 ways to provide them:
+# - Native: credentials are provided in the config file
+# - Vault: credentials are fetched from Vault
+# Get both k8s and Gitea credentials from Vault
+[sites.alps.k8s.authentication.vault]
+base_url = "https://vault.svc.cscs.ch"
+# Get both k8s and Gitea credentials in config file (same fashion as kubeconfig)
+# [sites.alps.k8s.authentication.Native]
+# base_url = "https://vault.svc.cscs.ch"
+# certificate_authority_data = "--REDACTED"
+# client_certificate_data = "--REDACTED--"
+# client_key_data = "--REDACTED--"
