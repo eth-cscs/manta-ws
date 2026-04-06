@@ -10,7 +10,7 @@ mod manta_backend_dispatcher;
 
 use ::manta_backend_dispatcher::{
   interfaces::{
-    bss::BootParametersTrait, cfs::CfsTrait, hsm::group::GroupTrait,
+    bss::BootParametersTrait, cfs::CfsTrait, hsm::{group::GroupTrait, hardware_inventory::HardwareInventory},
     pcs::PCSTrait,
   },
   types::{K8sAuth, K8sDetails, bss::BootParameters},
@@ -1237,7 +1237,7 @@ async fn get_hsm_hardware(
     &auth_token,
     &shasta_base_url,
     &shasta_root_cert,
-    Some(&[&group]),
+    Some(&[group]),
     None,
   )
   .await
@@ -1258,31 +1258,29 @@ async fn get_hsm_hardware(
   // Get HW inventory details for target HSM group
   for hsm_member in hsm_group_target_members.clone() {
     let shasta_token_string = auth_token.to_string(); // TODO: make it static
-    let shasta_base_url_string = shasta_base_url.to_string(); // TODO: make it static
-    let shasta_root_cert_vec = shasta_root_cert.to_vec();
     let hsm_member_string = hsm_member.to_string(); // TODO: make it static
     //
     let permit = Arc::clone(&sem).acquire_owned().await;
+    let backend = backend.clone();
 
     tracing::info!("Getting HW inventory details for node '{}'", hsm_member);
 
     tasks.spawn(async move {
       let _permit = permit; // Wait semaphore to allow new tasks https://github.com/tokio-rs/tokio/discussions/2648#discussioncomment-34885
-      csm_rs::hsm::hw_inventory::hw_component::http_client::get(
-        &shasta_token_string,
-        &shasta_base_url_string,
-        &shasta_root_cert_vec,
-        &hsm_member_string,
-      )
-      .await
-      .unwrap()
+        backend
+    .get_inventory_hardware_query(
+      &shasta_token_string, &hsm_member_string, None, None, None, None, None
+    )
+    .await.unwrap()
+
     });
   }
 
   while let Some(message_rslt) = tasks.join_next().await {
     match message_rslt {
-      Ok(node_summary) => {
-        hsm_summary.push(node_summary);
+      Ok(hardware_summary_value) => {
+        let node_summary: Value = hardware_summary_value.pointer("/Nodes/0").unwrap().clone();
+        hsm_summary.push(NodeSummary::from_csm_value(node_summary));
       }
       Err(e) => {
         tracing::error!("Failed procesing/fetching node hw information");
@@ -1592,7 +1590,7 @@ async fn node_migration(
     auth_token,
     &shasta_base_url,
     &shasta_root_cert,
-    Some(&[&target]),
+    Some(&[target.clone()]),
     None,
   )
   .await

@@ -45,7 +45,10 @@ use manta_backend_dispatcher::{
       RedfishEndpointArray,
     },
     ims::Image,
-    pcs::power_status::types::PowerStatusAll as FrontEndPowerStatusAll,
+    pcs::{
+      power_status::types::PowerStatusAll as FrontEndPowerStatusAll,
+      transitions::types::TransitionResponse,
+    },
   },
 };
 
@@ -115,7 +118,7 @@ impl GroupTrait for StaticBackendDispatcher {
   async fn get_member_vec_from_group_name_vec(
     &self,
     auth_token: &str,
-    hsm_group_name_vec: &[&str],
+    hsm_group_name_vec: &[String],
   ) -> Result<Vec<String>, Error> {
     match self {
       CSM(b) => {
@@ -187,7 +190,7 @@ impl GroupTrait for StaticBackendDispatcher {
   async fn get_groups(
     &self,
     auth_token: &str,
-    hsm_name_vec: Option<&[&str]>,
+    hsm_name_vec: Option<&[String]>,
   ) -> Result<Vec<Group>, Error> {
     match self {
       CSM(b) => b.get_groups(auth_token, hsm_name_vec).await,
@@ -526,7 +529,7 @@ impl PCSTrait for StaticBackendDispatcher {
     &self,
     auth_token: &str,
     nodes: &[String],
-  ) -> Result<Value, Error> {
+  ) -> Result<TransitionResponse, Error> {
     match self {
       CSM(b) => b.power_on_sync(auth_token, nodes).await,
       OCHAMI(b) => b.power_on_sync(auth_token, nodes).await,
@@ -538,7 +541,7 @@ impl PCSTrait for StaticBackendDispatcher {
     auth_token: &str,
     nodes: &[String],
     force: bool,
-  ) -> Result<Value, Error> {
+  ) -> Result<TransitionResponse, Error> {
     match self {
       CSM(b) => b.power_off_sync(auth_token, nodes, force).await,
       OCHAMI(b) => b.power_off_sync(auth_token, nodes, force).await,
@@ -550,7 +553,7 @@ impl PCSTrait for StaticBackendDispatcher {
     auth_token: &str,
     nodes: &[String],
     force: bool,
-  ) -> Result<Value, Error> {
+  ) -> Result<TransitionResponse, Error> {
     match self {
       CSM(b) => b.power_reset_sync(auth_token, nodes, force).await,
       OCHAMI(b) => b.power_reset_sync(auth_token, nodes, force).await,
@@ -1086,7 +1089,7 @@ impl CfsTrait for StaticBackendDispatcher {
     root_cert: &[u8],
     configuration_name: Option<&str>,
     configuration_name_pattern: Option<&str>,
-    hsm_group_name_vec: &[&str],
+    hsm_group_name_vec: &[String],
     since_opt: Option<NaiveDateTime>,
     until_opt: Option<NaiveDateTime>,
     limit_number_opt: Option<&u8>,
@@ -1160,7 +1163,7 @@ impl CfsTrait for StaticBackendDispatcher {
     auth_token: &str,
     base_url: &str,
     root_cert: &[u8],
-    xnames: Vec<String>,
+    xnames: &[String],
     desired_configuration: &str,
     enabled: bool,
   ) -> Result<(), Error> {
@@ -1320,7 +1323,7 @@ impl SatTrait for StaticBackendDispatcher {
     k8s_api_url: &str,
     shasta_k8s_secrets: serde_json::Value,
     sat_template_file_yaml: serde_yaml::Value,
-    hsm_group_available_vec: &[&str],
+    hsm_group_available_vec: &[String],
     ansible_verbosity_opt: Option<u8>,
     ansible_passthrough_opt: Option<&str>,
     gitea_base_url: &str,
