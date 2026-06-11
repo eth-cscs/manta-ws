@@ -1,4 +1,5 @@
-FROM rust:1.90.0-slim-bookworm AS builder
+<<<<<<< HEAD
+FROM rust:1.92.0-slim-bookworm AS builder
 # Install cmake for building the `librdkafka` crate statically
 RUN apt-get update && apt-get install -y --no-install-recommends \
 pkg-config \
@@ -16,4 +17,7 @@ RUN cargo build --release --jobs $(nproc)
 FROM debian:12.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends libssl-dev
 COPY --from=builder /usr/src/manta-ws/target/release/manta-ws /usr/local/bin/manta-ws
+RUN mkdir -p /root/.config/manta/
+COPY config.toml /root/.config/manta/config.toml
+COPY alps_root_cert.pem /root/.config/manta/alps_root_cert.pem
 CMD ["/usr/local/bin/manta-ws"]

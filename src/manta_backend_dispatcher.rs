@@ -19,8 +19,9 @@ use manta_backend_dispatcher::{
     bss::BootParametersTrait,
     cfs::CfsTrait,
     hsm::{
-      component::ComponentTrait, group::GroupTrait,
-      hardware_inventory::HardwareInventory,
+      component::ComponentTrait,
+      component_ethernet_interface::ComponentEthernetInterfaceTrait,
+      group::GroupTrait, hardware_inventory::HardwareInventory,
       redfish_endpoint::RedfishEndpointTrait,
     },
     ims::ImsTrait,
@@ -39,9 +40,15 @@ use manta_backend_dispatcher::{
       cfs_configuration_response::{CfsConfigurationResponse, Layer},
       session::{CfsSessionGetResponse, CfsSessionPostRequest},
     },
-    hsm::inventory::{RedfishEndpoint, RedfishEndpointArray},
+    hsm::inventory::{
+      ComponentEthernetInterface, IpAddressMapping, RedfishEndpoint,
+      RedfishEndpointArray,
+    },
     ims::Image,
-    pcs::power_status::types::PowerStatusAll as FrontEndPowerStatusAll,
+    pcs::{
+      power_status::types::PowerStatusAll as FrontEndPowerStatusAll,
+      transitions::types::TransitionResponse,
+    },
   },
 };
 
@@ -111,7 +118,7 @@ impl GroupTrait for StaticBackendDispatcher {
   async fn get_member_vec_from_group_name_vec(
     &self,
     auth_token: &str,
-    hsm_group_name_vec: &[&str],
+    hsm_group_name_vec: &[String],
   ) -> Result<Vec<String>, Error> {
     match self {
       CSM(b) => {
@@ -183,7 +190,7 @@ impl GroupTrait for StaticBackendDispatcher {
   async fn get_groups(
     &self,
     auth_token: &str,
-    hsm_name_vec: Option<&[&str]>,
+    hsm_name_vec: Option<&[String]>,
   ) -> Result<Vec<Group>, Error> {
     match self {
       CSM(b) => b.get_groups(auth_token, hsm_name_vec).await,
@@ -522,7 +529,7 @@ impl PCSTrait for StaticBackendDispatcher {
     &self,
     auth_token: &str,
     nodes: &[String],
-  ) -> Result<Value, Error> {
+  ) -> Result<TransitionResponse, Error> {
     match self {
       CSM(b) => b.power_on_sync(auth_token, nodes).await,
       OCHAMI(b) => b.power_on_sync(auth_token, nodes).await,
@@ -534,7 +541,7 @@ impl PCSTrait for StaticBackendDispatcher {
     auth_token: &str,
     nodes: &[String],
     force: bool,
-  ) -> Result<Value, Error> {
+  ) -> Result<TransitionResponse, Error> {
     match self {
       CSM(b) => b.power_off_sync(auth_token, nodes, force).await,
       OCHAMI(b) => b.power_off_sync(auth_token, nodes, force).await,
@@ -546,7 +553,7 @@ impl PCSTrait for StaticBackendDispatcher {
     auth_token: &str,
     nodes: &[String],
     force: bool,
-  ) -> Result<Value, Error> {
+  ) -> Result<TransitionResponse, Error> {
     match self {
       CSM(b) => b.power_reset_sync(auth_token, nodes, force).await,
       OCHAMI(b) => b.power_reset_sync(auth_token, nodes, force).await,
@@ -731,6 +738,158 @@ impl RedfishEndpointTrait for StaticBackendDispatcher {
   }
 }
 
+impl ComponentEthernetInterfaceTrait for StaticBackendDispatcher {
+  async fn get_all_component_ethernet_interfaces(
+    &self,
+    auth_token: &str,
+  ) -> Result<Vec<ComponentEthernetInterface>, Error> {
+    match self {
+      CSM(b) => b.get_all_component_ethernet_interfaces(auth_token).await,
+      OCHAMI(b) => b.get_all_component_ethernet_interfaces(auth_token).await,
+    }
+  }
+
+  async fn get_component_ethernet_interface(
+    &self,
+    auth_token: &str,
+    eth_interface_id: &str,
+  ) -> Result<ComponentEthernetInterface, Error> {
+    match self {
+      CSM(b) => {
+        b.get_component_ethernet_interface(auth_token, eth_interface_id)
+          .await
+      }
+      OCHAMI(b) => {
+        b.get_component_ethernet_interface(auth_token, eth_interface_id)
+          .await
+      }
+    }
+  }
+
+  async fn add_component_ethernet_interface(
+    &self,
+    auth_token: &str,
+    eth_interface: &ComponentEthernetInterface,
+  ) -> Result<(), Error> {
+    match self {
+      CSM(b) => {
+        b.add_component_ethernet_interface(auth_token, eth_interface)
+          .await
+      }
+      OCHAMI(b) => {
+        b.add_component_ethernet_interface(auth_token, eth_interface)
+          .await
+      }
+    }
+  }
+
+  async fn update_component_ethernet_interface(
+    &self,
+    auth_token: &str,
+    eth_interface_id: &str,
+    description: Option<&str>,
+    ip_address_mapping: (&str, &str),
+  ) -> Result<Value, Error> {
+    match self {
+      CSM(b) => {
+        b.update_component_ethernet_interface(
+          auth_token,
+          eth_interface_id,
+          description,
+          ip_address_mapping,
+        )
+        .await
+      }
+      OCHAMI(b) => {
+        b.update_component_ethernet_interface(
+          auth_token,
+          eth_interface_id,
+          description,
+          ip_address_mapping,
+        )
+        .await
+      }
+    }
+  }
+
+  async fn delete_all_component_ethernet_interfaces(
+    &self,
+    auth_token: &str,
+  ) -> Result<Value, Error> {
+    match self {
+      CSM(b) => b.delete_all_component_ethernet_interfaces(auth_token).await,
+      OCHAMI(b) => b.delete_all_component_ethernet_interfaces(auth_token).await,
+    }
+  }
+
+  async fn delete_component_ethernet_interface(
+    &self,
+    auth_token: &str,
+    eth_interface_id: &str,
+  ) -> Result<Value, Error> {
+    match self {
+      CSM(b) => {
+        b.delete_component_ethernet_interface(auth_token, eth_interface_id)
+          .await
+      }
+      OCHAMI(b) => {
+        b.delete_component_ethernet_interface(auth_token, eth_interface_id)
+          .await
+      }
+    }
+  }
+
+  /* async fn get_ip_addresses(
+    &self,
+    auth_token: &str,
+    eth_interface_id: &str,
+  ) -> Result<Vec<IpAddressMapping>, Error> {
+    match self {
+      CSM(_b) => todo!(),
+      //      CSM(b) => {
+      //        b.get_ip_addresses(
+      //          &self
+      //          auth_token,
+      //          eth_interface_id,
+      //        )
+      //        .await
+      //      }
+      OCHAMI(b) => b.get_ip_addresses(auth_token, eth_interface_id).await,
+    }
+  }
+
+  async fn delete_ip_address(
+    &self,
+    auth_token: &str,
+    _group_label: &str,
+    eth_interface_id: &str,
+    ip_address: &str,
+  ) -> Result<Value, Error> {
+    match self {
+      CSM(_b) => todo!(),
+      //        b.delete_ip_address(
+      //          &self
+      //          auth_token,
+      //          _group_label,
+      //          eth_interface_id,
+      //          ip_address,
+      //        )
+      //        .await
+      //      }
+      OCHAMI(b) => {
+        b.delete_ip_address(
+          auth_token,
+          _group_label,
+          eth_interface_id,
+          ip_address,
+        )
+        .await
+      }
+    }
+  } */
+}
+
+// end --------------------------
 impl CfsTrait for StaticBackendDispatcher {
   type T = Pin<Box<dyn AsyncBufRead + Send>>;
 
@@ -930,7 +1089,7 @@ impl CfsTrait for StaticBackendDispatcher {
     root_cert: &[u8],
     configuration_name: Option<&str>,
     configuration_name_pattern: Option<&str>,
-    hsm_group_name_vec: &[&str],
+    hsm_group_name_vec: &[String],
     since_opt: Option<NaiveDateTime>,
     until_opt: Option<NaiveDateTime>,
     limit_number_opt: Option<&u8>,
@@ -1004,7 +1163,7 @@ impl CfsTrait for StaticBackendDispatcher {
     auth_token: &str,
     base_url: &str,
     root_cert: &[u8],
-    xnames: Vec<String>,
+    xnames: &[String],
     desired_configuration: &str,
     enabled: bool,
   ) -> Result<(), Error> {
@@ -1164,7 +1323,7 @@ impl SatTrait for StaticBackendDispatcher {
     k8s_api_url: &str,
     shasta_k8s_secrets: serde_json::Value,
     sat_template_file_yaml: serde_yaml::Value,
-    hsm_group_available_vec: &[&str],
+    hsm_group_available_vec: &[String],
     ansible_verbosity_opt: Option<u8>,
     ansible_passthrough_opt: Option<&str>,
     gitea_base_url: &str,

@@ -2,41 +2,39 @@ log = "info"
 
 site = "alps"
 parent_hsm_group = "nodes_free"
+audit_file = "/home/msopena/manta_audit.log"
 
 [sites]
 
-[sites.alps]
-# socks5_proxy = "socks5h://127.0.0.1:1080"
-shasta_base_url = "https://api.cmn.alps.cscs.ch/apis"
-keycloak_base_url = "https://api.cmn.alps.cscs.ch/keycloak"
-gitea_base_url = "https://api.cmn.alps.cscs.ch/vcs"
-k8s_api_url = "https://10.252.1.12:6442"
-# vault_base_url = "https://vault.svc.cscs.ch" # vault in fulen
-# vault_role_id = "f9a867ff-2a05-cfda-10b1-bbae7591ff58" # vault in fulen
-vault_base_url = "https://hashicorp-vault.cscs.ch:8200"
-vault_secret_path = "shasta"
-vault_role_id = "b15517de-cabb-06ba-af98-633d216c6d99" # vault in hashicorp-vault.cscs.ch
-root_ca_cert_file = "alps_root_cert.pem"
+[sites.alps.k8s]
+api_url = "https://148.187.109.96:6444"
+# Some manta commands requires k8s or Gitea credentials. There are 2 ways to provide them:
+# - Native: credentials are provided in the config file
+# - Vault: credentials are fetched from Vault
+# Get both k8s and Gitea credentials from Vault
+[sites.alps.k8s.authentication.vault]
+base_url = "https://vault.svc.cscs.ch"
+# Get both k8s and Gitea credentials in config file (same fashion as kubeconfig)
+# [sites.alps.k8s.authentication.Native]
+# base_url = "https://vault.svc.cscs.ch"
+# certificate_authority_data = "--REDACTED"
+# client_certificate_data = "--REDACTED--"
+# client_key_data = "--REDACTED--"
 
 [sites.prealps]
-# socks5_proxy = "socks5h://127.0.0.1:1081"
-shasta_base_url = "https://api.cmn.prealps.cscs.ch/apis"
-keycloak_base_url = "https://api.cmn.prealps.cscs.ch/keycloak"
-gitea_base_url = "https://api.cmn.prealps.cscs.ch/vcs"
-k8s_api_url = "https://10.252.1.2:6442"
+socks5_proxy = "socks5h://127.0.0.1:1081"
+shasta_base_url = "https://api.cmn.alps.cscs.ch/apis"
+k8s_api_url = "https://148.187.29.254:6444"
 vault_base_url = "https://hashicorp-vault.cscs.ch:8200"
 vault_secret_path = "prealps"
 vault_role_id = "b15517de-cabb-06ba-af98-633d216c6d99" # vault in hashicorp-vault.cscs.ch
-root_ca_cert_file = "prealps_root_cert.pem"
+root_ca_cert_file = "/home/msopena/.config/manta/prealps_root_cert.pem"
 
 [sites.alpsm]
-# socks5_proxy = "socks5h://127.0.0.1:1082"
-shasta_base_url = "https://api.cmn.alpsm.cscs.ch/apis"
-keycloak_base_url = "https://api.cmn.alpsm.cscs.ch/keycloak"
-gitea_base_url = "https://api.cmn.alpsm.cscs.ch/vcs"
+socks5_proxy = "socks5h://127.0.0.1:1082"
+shasta_base_url = "https://api.cmn.alps.cscs.ch/apis"
 k8s_api_url = "https://10.252.1.2:6442"
 vault_base_url = "https://hashicorp-vault.cscs.ch:8200"
 vault_secret_path = "alpsm"
 vault_role_id = "b15517de-cabb-06ba-af98-633d216c6d99" # vault in hashicorp-vault.cscs.ch, this doesn't change for the whole CSCS
-root_ca_cert_file = "alpsm_root_cert.pem"
-
+root_ca_cert_file = "/home/msopena/.config/manta/alpsm_root_cert.pem"

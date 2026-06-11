@@ -10,7 +10,9 @@ mod manta_backend_dispatcher;
 
 use ::manta_backend_dispatcher::{
   interfaces::{
-    bss::BootParametersTrait, cfs::CfsTrait, hsm::group::GroupTrait,
+    bss::BootParametersTrait,
+    cfs::CfsTrait,
+    hsm::{group::GroupTrait, hardware_inventory::HardwareInventory},
     pcs::PCSTrait,
   },
   types::{K8sAuth, K8sDetails, bss::BootParameters},
@@ -51,7 +53,13 @@ use tracing_subscriber::{
   prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::jwt_utils::get_claims_from_jwt_token;
+use crate::{
+  commands::{
+    delete_all_ethernet, delete_ethernet, get_all_ethernet, get_ethernet,
+    post_ethernet,
+  },
+  jwt_utils::get_claims_from_jwt_token,
+};
 
 use tokio_util::io::ReaderStream;
 
@@ -112,6 +120,11 @@ async fn main() {
     .route("/redfish/{xname}", get(get_redfish))
     .route("/redfish", post(post_redfish))
     .route("/redfish/{xname}", delete(delete_redfish))
+    .route("/ethernet-interface", get(get_all_ethernet))
+    .route("/ethernet-interface/{id}", get(get_ethernet))
+    .route("/ethernet-interface", post(post_ethernet))
+    .route("/ethernet-interface", delete(delete_all_ethernet))
+    .route("/ethernet-interface/{id}", delete(delete_ethernet))
     .route("/authenticate", get(authenticate))
     .route("/console/{xname}", get(ws_console))
     .route("/cfssession/{cfssession}", get(get_cfs_session))
@@ -137,10 +150,7 @@ async fn main() {
   // `axum::Server` is a re-export of `hyper::Server`
   let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
   println!("listening on {}", addr);
-  //    axum::Server::bind(&addr)
-  //        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-  //        .await
-  //        .unwrap();
+
   axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app)
     .await
     .unwrap()
@@ -1213,7 +1223,13 @@ async fn get_group_details(
   let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
   let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-  let group = backend.get_group(&auth_token, &group).await.unwrap();
+  let group = match backend.get_group(&auth_token, &group).await {
+    Ok(group) => group,
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        .into_response();
+    }
+  };
 
   let hsm_groups_node_list = group.get_members();
 
@@ -1281,7 +1297,7 @@ async fn get_hsm_hardware(
     &auth_token,
     &shasta_base_url,
     &shasta_root_cert,
-    Some(&[&group]),
+    Some(&[group]),
     None,
   )
   .await
@@ -1302,31 +1318,36 @@ async fn get_hsm_hardware(
   // Get HW inventory details for target HSM group
   for hsm_member in hsm_group_target_members.clone() {
     let shasta_token_string = auth_token.to_string(); // TODO: make it static
-    let shasta_base_url_string = shasta_base_url.to_string(); // TODO: make it static
-    let shasta_root_cert_vec = shasta_root_cert.to_vec();
     let hsm_member_string = hsm_member.to_string(); // TODO: make it static
     //
     let permit = Arc::clone(&sem).acquire_owned().await;
+    let backend = backend.clone();
 
     tracing::info!("Getting HW inventory details for node '{}'", hsm_member);
 
     tasks.spawn(async move {
       let _permit = permit; // Wait semaphore to allow new tasks https://github.com/tokio-rs/tokio/discussions/2648#discussioncomment-34885
-      csm_rs::hsm::hw_inventory::hw_component::http_client::get(
-        &shasta_token_string,
-        &shasta_base_url_string,
-        &shasta_root_cert_vec,
-        &hsm_member_string,
-      )
-      .await
-      .unwrap()
+      backend
+        .get_inventory_hardware_query(
+          &shasta_token_string,
+          &hsm_member_string,
+          None,
+          None,
+          None,
+          None,
+          None,
+        )
+        .await
+        .unwrap()
     });
   }
 
   while let Some(message_rslt) = tasks.join_next().await {
     match message_rslt {
-      Ok(node_summary) => {
-        hsm_summary.push(node_summary);
+      Ok(hardware_summary_value) => {
+        let node_summary: Value =
+          hardware_summary_value.pointer("/Nodes/0").unwrap().clone();
+        hsm_summary.push(NodeSummary::from_csm_value(node_summary));
       }
       Err(e) => {
         tracing::error!("Failed procesing/fetching node hw information");
@@ -1636,7 +1657,7 @@ async fn node_migration(
     auth_token,
     &shasta_base_url,
     &shasta_root_cert,
-    Some(&[&target]),
+    Some(&[target.clone()]),
     None,
   )
   .await
