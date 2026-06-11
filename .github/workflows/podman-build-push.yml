@@ -117,7 +117,10 @@ jobs:
           git config user.email "actions@github.com"
           git add CHANGELOG.md
           git commit -m "chore: update CHANGELOG.md for v${{ steps.cargo-version.outputs.version }}"
-          git push
+          # On tag pushes / workflow_dispatch the workspace is in detached HEAD
+          # (checkout was given a tag ref), so plain `git push` has no upstream.
+          # Push the changelog commit onto main explicitly.
+          git push origin HEAD:refs/heads/main
 
           #      - name: Create Pull Request
           #        if: steps.generate.outputs.changes == 'true' && github.ref_name == 'main'
