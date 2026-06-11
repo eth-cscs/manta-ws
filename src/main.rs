@@ -10,7 +10,9 @@ mod manta_backend_dispatcher;
 
 use ::manta_backend_dispatcher::{
   interfaces::{
-    bss::BootParametersTrait, cfs::CfsTrait, hsm::{group::GroupTrait, hardware_inventory::HardwareInventory},
+    bss::BootParametersTrait,
+    cfs::CfsTrait,
+    hsm::{group::GroupTrait, hardware_inventory::HardwareInventory},
     pcs::PCSTrait,
   },
   types::{K8sAuth, K8sDetails, bss::BootParameters},
@@ -1169,7 +1171,13 @@ async fn get_group_details(
   let auth_header = headers.get("authorization").unwrap().to_str().unwrap();
   let auth_token = auth_header.split(" ").nth(1).unwrap();
 
-  let group = backend.get_group(&auth_token, &group).await.unwrap();
+  let group = match backend.get_group(&auth_token, &group).await {
+    Ok(group) => group,
+    Err(e) => {
+      return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        .into_response();
+    }
+  };
 
   let hsm_groups_node_list = group.get_members();
 
@@ -1267,19 +1275,26 @@ async fn get_hsm_hardware(
 
     tasks.spawn(async move {
       let _permit = permit; // Wait semaphore to allow new tasks https://github.com/tokio-rs/tokio/discussions/2648#discussioncomment-34885
-        backend
-    .get_inventory_hardware_query(
-      &shasta_token_string, &hsm_member_string, None, None, None, None, None
-    )
-    .await.unwrap()
-
+      backend
+        .get_inventory_hardware_query(
+          &shasta_token_string,
+          &hsm_member_string,
+          None,
+          None,
+          None,
+          None,
+          None,
+        )
+        .await
+        .unwrap()
     });
   }
 
   while let Some(message_rslt) = tasks.join_next().await {
     match message_rslt {
       Ok(hardware_summary_value) => {
-        let node_summary: Value = hardware_summary_value.pointer("/Nodes/0").unwrap().clone();
+        let node_summary: Value =
+          hardware_summary_value.pointer("/Nodes/0").unwrap().clone();
         hsm_summary.push(NodeSummary::from_csm_value(node_summary));
       }
       Err(e) => {
