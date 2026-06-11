@@ -1,3 +1,9 @@
+## What's Changed in 0.6.1
+* ci: push CHANGELOG.md to main explicitly to handle detached HEAD by @Masber
+* chore: update CHANGELOG.md for v0.6.1 by @actions-user
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.6.1...0.6.1
+
 ## What's Changed in v0.6.1
 * chore: Release manta-ws version 0.6.1 by @Masber
 * Merge branch 'feature/ethernet_interfaces' by @Masber
