@@ -1,4 +1,31 @@
-## What's Changed in 0.3.0
+## What's Changed in v0.6.1
+* chore: Release manta-ws version 0.6.1 by @Masber
+* Merge branch 'feature/ethernet_interfaces' by @Masber
+* ci: commit Cargo.lock and build with --locked by @Masber
+* ci: install librdkafka build dependencies in test job by @Masber
+* fix: crash when fetching group details by @Masber
+* chore: update Dockerfile and add config.toml and alps CA public cert file by @Masber
+* feat: update manta dependencies by @Masber
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.6.0...v0.6.1
+
+## What's Changed in v0.6.0
+* chore: Release manta-ws version 0.6.0 by @Masber
+* feat: add new endpoint to delete all ethernet interfaces by @Masber
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.5.0...v0.6.0
+
+## What's Changed in v0.5.0
+* chore: Release manta-ws version 0.5.0 by @Masber
+* feat: add new endpoints to manage ethernet endpoints by @Masber
+
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.4.0...v0.5.0
+
+## What's Changed in v0.4.0
+* chore: Release manta-ws version 0.4.0 by @Masber
+* feat: working get_all by @Masber
+* feature: ethernet interfaces by @aescoubas
+* chore: update CHANGELOG.md for v0.3.0 by @actions-user
 * chore: update dockerfile by @Masber in [#32](https://github.com/eth-cscs/manta-ws/pull/32)
 * fix(docker): install complete perl by @t-h2o
 * chore(docker): pin the debian slim version by @t-h2o
@@ -6,7 +33,7 @@
 * chore: update CHANGELOG.md for v0.3.0 by @actions-user
 * chore: update CHANGELOG.md for v0.3.0 by @actions-user
 
-**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.3.0...0.3.0
+**Full Changelog**: https://github.com/eth-cscs/manta-ws/compare/v0.3.0...v0.4.0
 
 ## What's Changed in v0.3.0
 * chore: Release manta-ws version 0.3.0 by @Masber
