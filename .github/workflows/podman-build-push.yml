@@ -62,11 +62,11 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --locked
 
       - name: Test build
         if: github.event_name == 'pull_request'  # Test build to check if everything is fine during pull requests
-        run: cargo install --path .
+        run: cargo install --locked --path .
 
   generate-changelog:
     runs-on: ubuntu-latest
