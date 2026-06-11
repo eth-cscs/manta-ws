@@ -34,6 +34,19 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
+      - name: Install build dependencies for rdkafka-sys
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            pkg-config \
+            libcurl4-openssl-dev \
+            libsasl2-dev \
+            libssl-dev \
+            libzstd-dev \
+            zlib1g-dev
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
